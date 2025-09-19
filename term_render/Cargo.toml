@@ -1,0 +1,12 @@
+[package]
+name = "term_render"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vte = "0.15.0"  # For escape sequence parsing
+crossterm = "0.29.0"
+crossbeam = "0.8.4"
+parking_lot = "0.12.4"
+proc_macros = { path = "proc_macros" }
+tokio = { version = "1.47.1", features=["io-util", "macros", "rt-multi-thread", "io-std", "time", "fs", "net"] }
