@@ -4,9 +4,8 @@ pub use proc_macros;
 pub mod event_handler;
 pub mod render;
 pub mod widget;
+pub mod widget_impls;
 
-use tokio;
-use crossbeam;
 use crate::event_handler::KeyModifiers;
 
 // writing this out gets really verbose really quickly
@@ -49,11 +48,12 @@ impl App {
     pub fn new() -> std::io::Result<Self> {
         let renderer = std::sync::Arc::new(parking_lot::RwLock::new(render::App::new()?));
         let events = std::sync::Arc::new(parking_lot::RwLock::new(event_handler::KeyParser::new()));
-
+        let (width, height) = renderer.read().get_terminal_size()?;
+        
         Ok(Self {
             renderer,
             events,
-            area: std::sync::Arc::new(parking_lot::RwLock::new(render::Rect { width: 0, height: 0 })),
+            area: std::sync::Arc::new(parking_lot::RwLock::new(render::Rect { width, height })),
             exit: std::sync::Arc::new(parking_lot::RwLock::new(false)),
             scene: None,
         })
@@ -62,14 +62,17 @@ impl App {
     /// Run the application with a provided update callback function.
     /// The callback function takes a mutable reference to the App instance and returns a tuple (T, bool).
     /// The loop continues until the callback function returns true.
-    /// The first element is of type T, representing any returned errors
+    /// The first element is of type T, representing any returned errors from the callback.
     pub async fn run<C, T: Sized + std::fmt::Debug>(&mut self, data: C, update_call_back: fn(&mut C, &mut App) -> Result<bool, T>) -> Result<(), T> {
+        let terminal_size_change = std::sync::Arc::new(parking_lot::RwLock::new(true));
+        let terminal_size_change_clone = terminal_size_change.clone();
+        
         let renderer_clone = self.renderer.clone();
         let (sender, receiver) = crossbeam::channel::bounded(10);
         let area_clone = self.area.clone();
         let exit_clone = self.exit.clone();
         let render_handle: tokio::task::JoinHandle<Result<(), AppErr>> = tokio::spawn( async move {
-            Self::render((renderer_clone, receiver), area_clone, exit_clone).await?;
+            Self::render((renderer_clone, receiver), area_clone, exit_clone, terminal_size_change_clone).await?;
             Ok(())
         });
         let exit_clone = self.exit.clone();
@@ -77,7 +80,7 @@ impl App {
         let events_handle = tokio::spawn( async move {
             Self::handle_events(exit_clone, events_clone).await;
         });
-        match self.running_loop(data, update_call_back, sender).await {
+        match self.running_loop(data, update_call_back, sender, terminal_size_change).await {
             Err(e) => {
                 println!("Error in running loop: {:?}", e);
             },
@@ -114,15 +117,18 @@ impl App {
     async fn running_loop<C, T: Sized + std::fmt::Debug>(&mut self,
                                                          mut data: C,
                                                          update_call_back: fn(&mut C, &mut App) -> Result<bool, T>,
-                                                         sender: crossbeam::channel::Sender<bool>
+                                                         sender: crossbeam::channel::Sender<bool>,
+                                                         terminal_size_change: SendSync<bool>
     ) -> Result<(), AppErr> {
         loop {
+            // quick sleep to keep the events up-to-date enough
+            tokio::time::sleep(tokio::time::Duration::from_secs_f64(0.01)).await;
             let result = update_call_back(&mut data, self);
             match result {
                 Ok(should_exit) => {
                     let events_read = self.events.read();
                     // making sure there is some safety in case the user messed up something
-                    if should_exit || (events_read.contains_modifier(&KeyModifiers::Control) && events_read.contains_char('c')) {  break;  }
+                    if should_exit || (events_read.contains_modifier(KeyModifiers::Control) && events_read.contains_char('c')) {  break;  }
                 },
                 Err(e) => {
                     println!("Error in update callback: {:?}", e);
@@ -134,7 +140,11 @@ impl App {
             // updating the scene
             if let Some(scene) = &mut self.scene {
                 // updating all widgets' states based on the events and their rendered windows
-                scene.update_all_widgets(&self.events);
+                scene.update_all_widgets(&self.events, &mut *self.renderer.write(), &self.area.read());
+                
+                if *terminal_size_change.read() {
+                    scene.force_update_all_widgets(&mut *self.renderer.write());
+                }
             }
             
             self.events.write().clear_events();
@@ -194,13 +204,14 @@ impl App {
     }
     
     /// Handles rendering for a single frame.
-    async fn render_handling(renderer: SendSync<render::App>, area: SendSync<render::Rect>) -> Result<(), AppErr> {
+    async fn render_handling(renderer: SendSync<render::App>, area: SendSync<render::Rect>, terminal_size_change: &SendSync<bool>) -> Result<(), AppErr> {
         let ar = match renderer.read().get_terminal_size() {
             Err(e) => {
                 return Err(AppErr::new(&format!("Failed to get terminal size: {:?}", e)));
             },
             Ok(size) => size,
         };
+        *terminal_size_change.write() = area.read().width != ar.0 || area.read().height != ar.1;
         *area.write() = render::Rect {
             width: ar.0,
             height: ar.1,
@@ -217,19 +228,22 @@ impl App {
     async fn render(renderer: (SendSync<render::App>,
                                crossbeam::channel::Receiver<bool>),
                                area: SendSync<render::Rect>,
-                               exit: SendSync<bool>
+                               exit: SendSync<bool>,
+                               terminal_size_change: SendSync<bool>
     ) -> Result<(), AppErr> {
         let exit_clone = exit.clone();
         let result_handle: tokio::task::JoinHandle<Result<(), AppErr>> = tokio::spawn(async move {
             loop {
                 let renderer = renderer.clone();
                 let area = area.clone();
-                Self::render_handling(renderer.0, area).await?;
-                match renderer.1.recv() {
-                    Ok(_) => {},
-                    Err(e) => { return Err(AppErr::new(&format!("Failed to receive render sync on channel: {:?}", e))); }  // channel disconnected, exit the loop
-                }
+                Self::render_handling(renderer.0, area, &terminal_size_change).await?;
                 if *exit_clone.read() {  break;  }
+                match renderer.1.recv() {
+                    // the if is necessary to prevent errors whenever exiting (this would wait for a non-existent signal)
+                    // no real errors or important ones should be sent in that tiny period of time
+                    Err(e) if !*exit_clone.read() => { return Err(AppErr::new(&format!("Failed to receive render sync on channel: {:?}", e))); }  // channel disconnected, exit the loop
+                    _ => {},
+                }
             } Ok(())
         });
         let result = result_handle.await;

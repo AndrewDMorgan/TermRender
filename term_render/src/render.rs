@@ -1029,6 +1029,8 @@ pub struct App {
 
 impl Drop for App {
     fn drop (&mut self) {
+        //std::thread::sleep(std::time::Duration::from_secs_f64(5.));
+        
         event_handler::disable_mouse_capture();
         crossterm::terminal::disable_raw_mode().unwrap();
 

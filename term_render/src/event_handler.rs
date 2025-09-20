@@ -7,6 +7,7 @@ use vte::Perform;
 const SCROLL_SENSITIVITY: f64 = 0.05;
 const SCROLL_LOG_TIME: f64 = 0.75;
 
+#[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Default)]
 pub enum KeyModifiers {
     Shift,
@@ -15,6 +16,7 @@ pub enum KeyModifiers {
     Control,
 }
 
+#[repr(u8)]
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum KeyCode {
     Delete,
@@ -27,6 +29,7 @@ pub enum KeyCode {
     Escape,
 }
 
+#[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Default)]
 pub enum MouseEventType {
     #[default] Null,
@@ -37,6 +40,7 @@ pub enum MouseEventType {
     Up,
 }
 
+#[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Default)]
 pub enum MouseState {
     Release,
@@ -148,8 +152,8 @@ impl KeyParser {
         self.char_events.contains(&chr)
     }
 
-    pub fn contains_modifier (&self, modifier: &KeyModifiers) -> bool {
-        self.key_modifiers.contains(modifier)
+    pub fn contains_modifier (&self, modifier: KeyModifiers) -> bool {
+        self.key_modifiers.contains(&modifier)
     }
 
     pub fn contains_mouse_modifier (&self, modifier: KeyModifiers) -> bool {

@@ -1,21 +1,20 @@
 #![allow(dead_code)]  // to avoid redundant warnings as this is a library module
 
 // handles widgets and all between
-use crate::{event_handler, render as term_render, SendSync};
+use crate::{event_handler, render as term_render, render, SendSync};
 
 /// A trit representing the internal clockwork for a given widget.
 /// Additional functionality can be built on top of this trait.
 /// This trait provides the core necessities for a widget to function within the rendering system.
 pub trait Widget {
     // a simple way of forcing the user to use an underlying window (necessary for the renderer to work)
-    fn get_window_mut(&mut self) -> &mut term_render::Window;
-    fn get_window_ref(&self) -> &term_render::Window;
+    fn get_window_ref(&self) -> String;
     
     // for handling updates (a static widget would just have this empty)
     fn update_with_events(&mut self, events: &SendSync<event_handler::KeyParser>);
     
     /// Updates the underlying window.
-    fn update_render(&mut self);
+    fn update_render(&mut self, window: &mut term_render::Window, area: &term_render::Rect);
     
     fn get_children_indexes(&self) -> Vec<usize>;
     fn add_child_index(&mut self, index: usize);
@@ -111,8 +110,28 @@ pub struct Scene {
 }
 
 impl Scene {
+    pub fn new() -> Self {
+        Scene {
+            widgets: PositionReservedVector {
+                vector: Vec::new(),
+                reserved_positions: Vec::new(),
+            },
+            root_index: None,
+        }
+    }
+    
+    pub fn widget_as_ref(&self, index: usize) -> Result<&Box<dyn Widget>, WidgetErr> {
+        self.widgets.index(index).ok_or(WidgetErr::new("Index out of bounds"))
+    }
+    
+    pub fn widget_as_mut(&mut self, index: usize) -> Result<&mut Box<dyn Widget>, WidgetErr> {
+        self.widgets.index_mut(index).ok_or(WidgetErr::new("Index out of bounds"))
+    }
+    
     // whenever a widget is updated, all its parents need to be updated as well
-    pub fn add_widget(&mut self, widget: Box<dyn Widget>, parent: Option<usize>) -> Result<usize, WidgetErr> {
+    pub fn add_widget(&mut self, widget: Box<dyn Widget>, parent: Option<usize>, window: term_render::Window, app: &mut term_render::App) -> Result<usize, WidgetErr> {
+        app.add_window(window, widget.get_window_ref(), vec![]);
+        
         let index = self.widgets.len();
         self.widgets.push(widget);
         
@@ -130,13 +149,15 @@ impl Scene {
         Ok(index)
     }
     
-    pub fn remove_widget(&mut self, index: usize) -> Result<(), WidgetErr> {
+    pub fn remove_widget(&mut self, index: usize, app: &mut term_render::App) -> Result<(), WidgetErr> {
         if index >= self.widgets.len() {
             return Err(WidgetErr::new("Index out of bounds"));
         }
         
+        app.remove_window(self.widgets.index(index).unwrap().get_window_ref()).unwrap();
+        
         // updating the parents windows
-        self.update_parents(index)?;
+        self.update_parents(index, app)?;
         
         // remove from parent's children list
         if let Some(parent_index) = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_parent_index() {
@@ -149,7 +170,7 @@ impl Scene {
         // remove all children recursively
         let children = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_children_indexes();
         for &child_index in &children {
-            self.remove_widget(child_index)?;
+            self.remove_widget(child_index, app)?;
         }
         
         // finally, remove the widget itself
@@ -160,36 +181,51 @@ impl Scene {
     
     /// Updates the state of all widgets in the scene.
     /// Also updates the underlying windows of each widget.
-    pub fn update_all_widgets(&mut self, events: &SendSync<event_handler::KeyParser>) {
+    pub fn update_all_widgets(&mut self, events: &SendSync<event_handler::KeyParser>, app: &mut render::App, area: &term_render::Rect) {
         for i in 0..self.widgets.len() {
             if let Some(widget) = self.widgets.index_mut(i) {
                 widget.update_with_events(events);
-                widget.update_render();
+                let window = widget.get_window_ref();
+                widget.update_render(app.get_window_reference_mut(window), area);
             }
         }
     }
     
-    pub fn update_widget(&mut self, index: usize, events: &SendSync<event_handler::KeyParser>) -> Result<(), WidgetErr> {
+    pub fn force_update_all_widgets(&mut self, app: &mut render::App) {
+        for i in 0..self.widgets.len() {
+            if let Some(widget) = self.widgets.index_mut(i) {
+                //widget.update_render();  // this should already have been done
+                app.get_window_reference_mut(widget.get_window_ref()).update_all();
+            }
+        }
+    }
+    
+    pub fn update_widget(&mut self, index: usize, events: &SendSync<event_handler::KeyParser>, app: &mut term_render::App, area: &term_render::Rect) -> Result<(), WidgetErr> {
         if index >= self.widgets.len() {
             return Err(WidgetErr::new("Index out of bounds"));
         }
         
-        self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).update_with_events(events);
-        self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).update_render();
-        self.update_parents(index)?;
+        let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?);
+        widget.update_with_events(events);
+        let window = app.get_window_reference_mut(widget.get_window_ref());
+        widget.update_render(window, area);
+        self.update_parents(index, app)?;
         
         Ok(())
     }
     
-    pub fn update_widget_renderer(&mut self, index: usize) -> Result<(), WidgetErr> {
-        self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).update_render();
+    pub fn update_widget_renderer(&mut self, index: usize, app: &mut term_render::App, area: &term_render::Rect) -> Result<(), WidgetErr> {
+        let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?);
+        let window = app.get_window_reference_mut(widget.get_window_ref());
+        widget.update_render(window, area);
         Ok(())
     }
     
-    fn update_parents(&mut self, index: usize) -> Result<(), WidgetErr> {
+    fn update_parents(&mut self, index: usize, app: &mut term_render::App) -> Result<(), WidgetErr> {
         if let Some(parent_index) = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_parent_index() {
-            self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_window_mut().update_all();
-            self.update_parents(parent_index)?;
+            let widget = self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?);
+            app.get_window_reference_mut(widget.get_window_ref()).update_all();
+            self.update_parents(parent_index, app)?;
         } Ok(())
     }
 }

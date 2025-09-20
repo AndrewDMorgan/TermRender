@@ -1,5 +1,5 @@
 use term_render::{self, event_handler::KeyCode};
-use tokio;
+use term_render::widget_impls::WidgetBuilder;
 
 // this acts as the callback that is called every frame
 // this is the entry point and any logic needs to branch out from here
@@ -31,6 +31,20 @@ async fn main() -> tokio::io::Result<()> {
     let data = AppData {
         time: std::time::Instant::now(),
     };
+    
+    let mut scene = term_render::widget::Scene::new();
+    
+    let (widget, window) =
+        term_render::widget_impls::StaticWidget::builder(String::from("name"))
+            .with_border(true)
+            .with_renderer(Box::new(|_size, _position| {
+                Some(vec![])
+            }))
+            .with_position((10, 10))
+            .with_size((50, 10))
+            .build(&app.area.read()).unwrap();
+    scene.add_widget(widget, None, window, &mut *app.renderer.write()).unwrap();
+    app.scene = Some(scene);
     
     // running the application with the provided callback function
     app.run(data, |data, app_instance| {
