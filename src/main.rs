@@ -35,7 +35,7 @@ async fn main() -> tokio::io::Result<()> {
     let mut scene = term_render::widget::Scene::new();
     
     let (widget, window) =
-        term_render::widget_impls::StaticWidget::builder(String::from("name"))
+        term_render::widget_impls::StaticWidgetBuilder::builder(String::from("name"))
             .with_border(true)
             .with_renderer(Box::new(|_size, _position| {
                 Some(vec![])

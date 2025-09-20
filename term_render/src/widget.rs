@@ -132,8 +132,8 @@ impl Scene {
     pub fn add_widget(&mut self, widget: Box<dyn Widget>, parent: Option<usize>, window: term_render::Window, app: &mut term_render::App) -> Result<usize, WidgetErr> {
         app.add_window(window, widget.get_window_ref(), vec![]);
         
-        let index = self.widgets.len();
-        self.widgets.push(widget);
+        //let index = self.widgets.len();
+        let index = self.widgets.push(widget);
         
         // adding the optional parent-child relationship (only the root node can be parentless)
         if let Some(parent_index) = parent {
