@@ -86,6 +86,12 @@ pub struct WidgetBuilderError {
     details: String,
 }
 
+impl std::fmt::Display for WidgetBuilderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WidgetBuilderError: {}", self.details)
+    }
+}
+
 /// Builder for creating StaticWidget instances with a fluent interface.
 /// Maintains configuration state until build() is called to create the actual widget.
 /// `StaticWidgetBuilder` is an example of an implementation of `WidgetBuilder`, where
