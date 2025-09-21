@@ -6,16 +6,31 @@ use crate::widget::*;
 /// Implementors should provide a `build` method that creates the widget and its associated window.
 /// Implementors often *won't* implement `Widget`, but the returned type from `build` will.
 pub trait WidgetBuilder: Default {
+    /// Constructs the widget and its associated window based on the current configuration.
+    /// It's advised, but not required, the implementor doesn't implement `Widget`.
+    /// The returned type does have to implement `Widget`.
     fn build(self, display_area: &crate::render::Rect) -> Result<(Box<dyn Widget>, crate::render::Window), WidgetBuilderError>;
+    /// Sets the widget's position
     fn with_position(self, position: (u16, u16)) -> Self;
+    /// Sets the widget's size
     fn with_size(self, size: (u16, u16)) -> Self;
+    /// Sets the widget's dynamic position
     fn with_dynamic_position(self, position_offset: (i16, i16), position_area_percent: (f32, f32)) -> Self;
+    /// Sets the widget's dynamic size
     fn with_dynamic_size(self, size_offset: (i16, i16), size_area_percent: (f32, f32)) -> Self;
+    /// Sets if the widget has a border or not
     fn with_border(self, border: bool) -> Self;
+    /// Sets the widget's title (displayed in border if enabled; invisible otherwise)
     fn with_title(self, title: String) -> Self;
+    /// Sets the widget's depth (z-index)
     fn with_depth(self, depth: u16) -> Self;
+    /// Sets the widget's custom renderer closure
     fn with_renderer(self, renderer: Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>) -> Self;
+    /// Creates a new builder instance with the provided unique name identifier.
+    /// It's recommended that the identifying name is as inputed, and not
+    /// modified, to avoid conflicts if the user manually attempts to access the widget.
     fn builder(name: String) -> Self;
+    /// Sets the widget's SizeAndPosition configuration directly.
     fn with_sap(self, sap: SizeAndPosition) -> Self;
 }
 
@@ -25,10 +40,18 @@ pub trait WidgetBuilder: Default {
 /// is resized.
 #[derive(Default)]
 pub struct SizeAndPosition {
+    /// Fixed size adjustment (width, height) in characters
     pub size_offset: (i16, i16),
+    /// Fixed position adjustment (x, y) in character coordinates
     pub position_offset: (i16, i16),
     
+    /// Size as percentage of terminal area (width%, height%) in the range [0, 1]
+    /// The final size is calculated as:
+    /// `final_size = (terminal_area * size_area_percent) + size_offset`
     pub size_area_percent: (f32, f32),  // percentage of the terminal area (0.5 is the center)
+    /// Position as percentage of terminal area (x%, y%) in the range [0, 1]
+    /// The final position is calculated as:
+    /// `final_position = (terminal_area * position_area_percent) + position_offset`
     pub position_area_percent: (f32, f32),  // percentage of the terminal area (0.5 is the center)
 }
 
@@ -98,13 +121,17 @@ impl std::fmt::Display for WidgetBuilderError {
 /// the struct doesn't implement `Widget`.
 #[derive(Default)]
 pub struct StaticWidgetBuilder {
-    children: Vec<usize>,
+    /// The unique name identifier for the widget.
     name: String,
-    parent_index: Option<usize>,
+    /// The z-index depth of the widget; higher values render on top of lower ones.
     depth: Option<u16>,
-    boarder: bool,
+    /// Whether the widget should have a border.
+    border: bool,
+    /// The title of the widget, if any.
     title: Option<String>,
+    /// The size and position configuration for the widget.
     pub size_and_position: SizeAndPosition,
+    /// The custom render function for the widget, if any.
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 }
 
@@ -128,12 +155,12 @@ impl WidgetBuilder for StaticWidgetBuilder {
         }
         let depth = self.depth.as_ref().unwrap_or(&0u16);
         let mut window = crate::render::Window::new(position, *depth, size);
-        if self.boarder {  window.bordered();  }
+        if self.border {  window.bordered();  }
         if let Some(title) = &self.title {  window.titled(title.clone());  }
         Ok((Box::new(StaticWidget {
-            children: self.children,
+            children: vec![],
             name: self.name,
-            parent_index: self.parent_index,
+            parent_index: None,
             size_and_position: self.size_and_position,
             render_function: self.render_function,
         }), window))
@@ -169,7 +196,7 @@ impl WidgetBuilder for StaticWidgetBuilder {
     
     /// Sets whether the widget should have a border. By default, all widgets are borderless.
     fn with_border(mut self, border: bool) -> Self {
-        self.boarder = border;
+        self.border = border;
         self
     }
     
@@ -222,13 +249,11 @@ impl WidgetBuilder for StaticWidgetBuilder {
     /// ```
     fn builder(name: String) -> Self {
         Self {
-            children: vec![],
             name,
-            parent_index: None,
             depth: None,
             size_and_position: SizeAndPosition::default(),
             render_function: None,
-            boarder: false,
+            border: false,
             title: None,
         }
     }
@@ -246,17 +271,26 @@ impl WidgetBuilder for StaticWidgetBuilder {
 /// `StaticWidgetBuilder` is the associated builder for creating instances of this widget.
 #[derive(Default)]
 pub struct StaticWidget {
+    /// The indices of child widgets in the scene graph.
     children: Vec<usize>,
+
+    /// The unique name identifier for the widget. The rendering backend
+    /// relies on `String` names instead of widgets.
     name: String,
+
+    /// The index of the parent widget in the scene graph, if any (None would
+    /// indicate the root node, which there can only be one of).
     parent_index: Option<usize>,
     
     // this should be an easy, lightweight, and changeable way to get the size and position
     // it needs to be light enough to be changed to something new if the state of the app changes
     // (such as a menu opening and shifting things).
+    /// Configuration for the widget's size and position, supporting both static and dynamic layouts.
     pub size_and_position: SizeAndPosition,
     
     // takes the size and position in, and returns the vector of spans to render
     // this is a function object, allowing for capturing of state if desired
+    /// Optional closure that generates the widget's rendered content based on size and position.
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 }
 
