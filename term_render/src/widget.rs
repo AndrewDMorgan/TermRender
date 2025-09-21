@@ -35,7 +35,7 @@ pub trait Widget {
     /// Clears all child widget indices from this widget.
     fn clear_children_indexes(&mut self);
     
-    /// Returns the parent widget index if one exists.
+    /// Returns the parent widget index if one exists, otherwise returns `None`.
     fn get_parent_index(&self) -> Option<usize>;
     
     /// Sets or clears the parent widget index for hierarchy management.
@@ -170,16 +170,17 @@ impl Scene {
     /// Adds a widget to the scene and registers its window with the renderer.
     /// Establishes parent-child relationships and handles root node assignment.
     /// Returns the index where the widget was placed.
-    pub fn add_widget(&mut self, widget: Box<dyn Widget>, parent: Option<usize>, window: term_render::Window, app: &mut term_render::App) -> Result<usize, WidgetErr> {
+    pub fn add_widget(&mut self, widget: Box<dyn Widget>, window: term_render::Window, app: &mut term_render::App) -> Result<usize, WidgetErr> {
         app.add_window(window, widget.get_window_ref(), vec![]);
         
         //let index = self.widgets.len();
+        let parent_index = widget.get_parent_index();
         let index = self.widgets.push(widget);
         
         // adding the optional parent-child relationship (only the root node can be parentless)
-        if let Some(parent_index) = parent {
-            self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).add_child_index(index);
-            self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).set_parent_index(parent);
+        if let Some(parent_index) = &parent_index {
+            self.widgets.index_mut(*parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).add_child_index(index);
+            self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).set_parent_index(Some(*parent_index));
         } else {
             if self.root_index.is_some() {
                 return Err(WidgetErr::new("Only one root widget allowed"));

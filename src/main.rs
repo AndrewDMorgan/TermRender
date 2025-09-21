@@ -43,7 +43,7 @@ async fn main() -> tokio::io::Result<()> {
             .with_position((10, 10))
             .with_size((50, 10))
             .build(&app.area.read()).unwrap();
-    scene.add_widget(widget, None, window, &mut *app.renderer.write()).unwrap();
+    scene.add_widget(widget, window, &mut *app.renderer.write()).unwrap();
     app.scene = Some(scene);
     
     // running the application with the provided callback function
