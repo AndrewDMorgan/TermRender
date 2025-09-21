@@ -960,7 +960,7 @@ impl Window {
     }
 
     // checks to see if any lines need to be updated
-    pub fn try_update_lines (&mut self, mut lines: Vec <Span>) {
+    pub fn try_update_lines (&mut self, mut lines: Vec <Span>) -> bool {
         if lines.len() != self.lines.len() {
             self.update_all();  // making sure every line gets updated (incase it was shrunk)
             self.was_updated = false;
@@ -969,7 +969,7 @@ impl Window {
                 if index >= self.updated.len() {  break;  }
                 self.lines.push((span, String::new(), 0));
             }
-            return;
+            return true;
         }
         let mut index = lines.len();
         let bordered = {
@@ -983,7 +983,7 @@ impl Window {
                 self.updated[index + bordered] = false;  // it was as easy as adding a plus 1....... me sad
                 self.was_updated = false;
             }
-        }
+        } self.was_updated
     }
 
     pub fn is_empty (&self) -> bool {

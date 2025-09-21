@@ -243,6 +243,7 @@ impl WidgetBuilder for StaticWidgetBuilder {
 /// A widget that renders static content using a provided closure (i.e.
 /// a title box or description).
 /// Suitable for content that doesn't change frequently or in response to events.
+/// `StaticWidgetBuilder` is the associated builder for creating instances of this widget.
 #[derive(Default)]
 pub struct StaticWidget {
     children: Vec<usize>,
@@ -314,16 +315,16 @@ impl Widget for StaticWidget {
     /// Called automatically during render passes.
     /// If `Some(render_closure)` is provided, that closure will be called.
     /// If the closure returns `Some(Vec<Span>)`, then the rendered content will be set as such.
-    fn update_render(&mut self, window: &mut crate::render::Window, area: &crate::render::Rect) {
+    fn update_render(&mut self, window: &mut crate::render::Window, area: &crate::render::Rect) -> bool {
         // only needs to change with size
         let (size, position) = self.size_and_position.get_size_and_position(area);
         window.resize(size);
         window.r#move(position);
         if let Some(render_function) = &self.render_function {
             if let Some(render) = render_function(size, position) {
-                window.try_update_lines(render);
+                return window.try_update_lines(render);
             }
-        }
+        } false
     }
     
     /// Returns the indices of child widgets in the scene graph.
