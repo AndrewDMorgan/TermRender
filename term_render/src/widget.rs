@@ -68,6 +68,7 @@ impl WidgetErr {
 /// Uses a free-list of reserved positions to allow O(1) insertion/removal
 /// while preserving indices of existing elements - crucial for UI scene graphs.
 struct PositionReservedVector<T: Widget + ?Sized> {
+    /// The underlying vector storing widgets or None for reserved positions.
     pub vector: Vec<Option<Box<T>>>,
     /// List of indices that have been removed and can be reused.
     reserved_positions: Vec<usize>,
