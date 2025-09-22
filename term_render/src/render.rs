@@ -2,6 +2,7 @@
 
 use std::io::Write;
 
+// litterally just for enabling or disabling mouse support and stuff
 use crate::event_handler;
 
 
@@ -13,6 +14,7 @@ use crate::event_handler;
 // https://notes.burke.libbey.me/ansi-escape-codes/
 // https://stackoverflow.com/questions/4842424/list-of-ansi-color-escape-sequences
 // /033[... doesn't work; use /x1b[...
+
 pub static CLEAR: &str = "\x1b[0m";
 pub static SHOW_CURSOR: &str = "\x1b[?25h";
 pub static HIDE_CURSOR: &str = "\x1b[?25l";
@@ -92,8 +94,14 @@ impl ColorMode {
 static mut COLOR_MODE: ColorMode = ColorMode::Dark;
 
 
-#[derive(Clone, Debug, Eq, PartialEq, Default, Hash, Copy)]
 // Different base ascii text modifiers (static constants)
+/// The different color and text modifier types available.
+/// This is a much simpler and more ergonomic way to handle colors and text modifiers
+/// compared to the `UniqueColor` or `Colored` types.
+/// However, to convert a `ColorType` into `UniqueColor`, additional
+/// logic is necessary compared to directly using `UniqueColor`.
+/// This additional overhead is minimal and generally unnoticeable in most applications.
+#[derive(Clone, Debug, Eq, PartialEq, Default, Hash, Copy)]
 pub enum ColorType {
     Black,
     Red,
@@ -154,6 +162,10 @@ pub enum ColorType {
 // or a partially dynamic type.
 // This allows for a passing of different types,
 // circumventing lifetime issues while preserving statics.
+/// A simpler representation of a `ColorType`, reducing the many variants into
+/// a simple set of parameters which represent the raw escape codes.
+/// the pre-defined static colors provided at the top of this file are
+/// representative of the internally stored values.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UniqueColor {
     Static  ((Option <&'static str>, &'static [&'static str], bool)),
@@ -162,6 +174,8 @@ pub enum UniqueColor {
 
 impl UniqueColor {
     // Converts a static slice into a vector of type String
+    /// Converts a static slice of string references into a vector of owned Strings.
+    /// This is used internally to standardize the format of modifiers
     fn into_string_vec (&self, attributes: &'static [&'static str]) -> Vec<String> {
         let mut mods = vec![];
         for modifier in attributes {
@@ -173,6 +187,8 @@ impl UniqueColor {
     // Converts the unique color into a standardized tuple form.
     // In other words, converts the dynamic and static versions
     // into a single unified version for easier handling
+    /// Converts the unique color into a standardized tuple form, reducing variance
+    /// in the parameters for more efficient handling.
     pub fn unwrap_into_tuple (&self) -> (Option <String>, Vec <String>, bool) {
         match self {
             UniqueColor::Static(s) => {
@@ -340,8 +356,23 @@ impl ColorType {
 
 // Color setters for standard primitives
 
-/// Converts the given instance into the type Colored based on a provided
-/// set of modifiers (in the form of ColorType).
+/// Converts the given instance into the type `Colored` based on a provided
+/// set of modifiers (in the form of `ColorType`).
+/// `colorizes` adds multiple colors or modiferies, while `colorize` adds a single one.
+/// By default, `Colorize` is implemented for `&str`, `String`, and `Colored`.
+/// Additionally, under the proc_macros, the `color!` macro allows for a simplistic
+/// calling of these functions.
+/// For example, the following are equivalent:
+/// ```
+/// "Hello, world!".colorizes(vec![]);
+/// "Hello, world!".colorize(ColorType::Red);
+/// "Hello, world!".colorizes(vec![ColorType::Red, ColorType::Bold]);
+/// // and
+/// color!("Hello, world!");  // If zero modifiers are provided, it creates a `Colored` instance without any modifiers.
+/// color!("Hello, world!", Red);  // If zero modifiers are provided, it creates a `Colored` instance without any modifiers.
+/// color!("Hello, world!", Red, Bold);  // `ColorType::` is automatically added
+/// // where &str can be any `Colorize` implementor (e.g. String, Colored, or custom adaptations)
+/// ```
 pub trait Colorize {
     // adds a set of modifiers/colors
     fn colorizes (&self, colors: Vec <ColorType>) -> Colored;
@@ -373,7 +404,9 @@ impl Colorize for String {
 
 // A colored string
 // It stores all of its modifiers like colors/underlying/other
-//#[derive(Clone)]
+/// Represents a string with associated color and text modifiers.
+/// Multiple of these color text tokens can be combined into text
+/// spans or even into bigger blocks of stylized text.
 #[derive(Clone, Debug, Eq, PartialEq, Default, Hash)]
 pub struct Colored {
     text: String,
@@ -397,6 +430,7 @@ impl Colorize for Colored {
 }
 
 impl Colored {
+    /// Creates a new Colored isntance with a given text string, and no active modifiers or applied colors.
     pub fn new (text: String) -> Colored {
         Colored {
             text,
@@ -406,7 +440,8 @@ impl Colored {
         }
     }
 
-    /// returns the left and right halves as unique Colored instances. Keeps the original instance untouched.
+    /// returns the left and right halves as unique Colored instances with the
+    /// same modifiers, background color, and main color still applied.
     pub fn split (&self, mid_point: usize) -> (Colored, Colored) {
         (
             Colored {
@@ -423,11 +458,13 @@ impl Colored {
             }
         )
     }
-
+    
+    /// Checks if the Colored instance has no colors or modifiers applied.
     pub fn is_uncolored (&self) -> bool {
         self.mods.is_empty() && self.color.is_none() && self.bg_color.is_none()
     }
 
+    /// Checks if the given color type is contained within the current Colored instance.
     pub fn contains (&self, color: &ColorType) -> bool {
         let col = color.get_color().unwrap_into_tuple();
         if col.0 == self.bg_color && col.2 {  return true;  }
@@ -441,16 +478,33 @@ impl Colored {
         } false
     }
 
+    /// Changes the underlying text for the Colored text token.
     pub fn change_text (&mut self, text: String) {
         self.text = text;
     }
 
     // Adds a color type
+    /// Adds a `ColorType` to the current `Colored` instance.
+    /// This function converts the `ColorType` into a `UniqueColor`
+    /// and then calls `add_unique` to update the `Colored` instance.
+    /// Other member functions such as `add_unique` allow for
+    /// a direct assignment of a `UniqueColor`, which is a lower level representation,
+    /// but is typically unnecessary as the performance overhead is minimal.
     pub fn add_color (&mut self, color: ColorType) {
         self.add_unique(color.get_color());
     }
 
     // Adds a unique color
+    /// Adds a `UniqueColor` to the current `Colored` instance.
+    /// This function updates the color, background color, and modifiers
+    /// of the `Colored` instance based on the provided `UniqueColor`.
+    /// If the `UniqueColor` specifies a background color, it will overwrite
+    /// the existing background color. If it specifies a text color, it will
+    /// overwrite the existing text color only if it is not `None`.
+    /// Modifiers are appended to the existing list of modifiers.
+    /// Typically, other member functions such as `add_color` allow for
+    /// the adding a `ColorType`, which is a higher level abstraction
+    /// that is converted into a `UniqueColor` internally.
     pub fn add_unique (&mut self, unique_color: UniqueColor) {
         let (color, mods, background) = unique_color.unwrap_into_tuple();
         if background {  self.bg_color = color;  }
@@ -464,6 +518,8 @@ impl Colored {
     }
 
     // Takes a set of color types and returns a filled out Colored instance
+    /// Given an existing Colored instance and a set of colors, generates a new Colored instance
+    /// with the specified colors applied on top of the existing ones.
     pub fn get_from_color_types (colored: &Colored, colors: Vec <ColorType>) -> Colored {
         let mut colored = Colored {
             text: colored.text.clone(),
@@ -477,6 +533,9 @@ impl Colored {
     }
 
     // Takes a set of color types and returns a filled out Colored instance
+    /// Given a set of colors and a text string, generates a Colored instance with the specified colors applied.
+    /// This is a convenience function for quickly creating colored text without needing to manually
+    /// instantiate a Colored object first.
     pub fn get_from_color_types_str (text: &str, colors: Vec <ColorType>) -> Colored {
         let mut colored = Colored::new(text.to_owned());
         for color in colors {
@@ -485,6 +544,10 @@ impl Colored {
     }
 
     // Takes a set of unique colors and generates a filled out instance
+    /// A `UniqueColor` is a lower level representation of the color/modifier/background.
+    /// Usually, a ColorType is used to generate a UniqueColor. However, this function
+    /// allows for a direct assignment to avoid the extra computation if performance is a concern.
+    /// If the absolute best performance isn't needed, then using ColorType is recommended due to its simplicity.
     pub fn get_from_unique_colors (text: String, unique_colors: Vec <UniqueColor>) -> Colored {
         let mut colored = Colored::new(text);
         for color in unique_colors {
@@ -492,6 +555,9 @@ impl Colored {
         } colored
     }
 
+    /// Applies the specified colors to the specified text and returns the resulting string.
+    /// The `last_color` parameter is used to optimize the output by avoiding redundant color escape codes.
+    /// Returns the generated text and the character count of the text (not including escape codes).
     pub fn get_text (&self, last_color: &mut String) -> (String, usize) {
         let mut text = String::new();
 
@@ -527,24 +593,30 @@ impl Colored {
         (text, self.text.chars().count())
     }
 
+    /// Gets the total character count of the word.
     pub fn get_size (&self) -> usize {
         self.text.chars().count()
     }
 }
 
 // A colored span of text (fancy string)
+/// A colored span of text, consisting of multiple `Colored` segments.
+/// This allows for more complex text rendering with different colors and styles
+/// within a single line or span of text.
 #[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct Span {
     line: Vec <Colored>,
 }
 
 impl Span {
+    /// Generates a span from a given vector of `Colored` segments.
     pub fn from_tokens (tokens: Vec <Colored>) -> Self {
         Span {
             line: tokens,
         }
     }
 
+    /// Gets the total character count of the span (not including escape codes).
     pub fn size (&self) -> usize {
         let mut size = 0;
         for colored in &self.line {
@@ -553,6 +625,9 @@ impl Span {
         size
     }
 
+    /// Joins the colored segments into a single string, applying necessary color codes.
+    /// Returns the combined string and its total character count (the actual character count, not
+    /// including the characters consumed by escape codes).
     pub fn join (&self) -> (String, usize) {
         //let mut lastColored = vec![];
         let mut last_colored = String::new();
@@ -567,13 +642,17 @@ impl Span {
     }
 }
 
-
 // Similar to a paragraph in Ratatui
 // Windows are a block or section within the terminal space
 // Multiple windows can be rendered at once
 // Each window can contain its own text or logic
 // This allows a separation/abstraction for individual sections
 // This also allows for a cached window to be reused if temporarily closed
+
+/// A window is a block or section within the terminal space, similar to a paragraph in Ratatui.
+/// Multiple windows can be rendered at once, and each window can contain its own text or logic.
+/// Each widnow can be moved, resized, hidden, shown, and colored independently.
+/// Additionally, each window handles its own rendering logic, caching, and other behaviors.
 #[derive(Clone, Debug, Eq, PartialEq, Default, Hash)]
 pub struct Window {
     pub position: (u16, u16),
@@ -591,9 +670,17 @@ pub struct Window {
     pub hidden: bool,
 }
 
+/// A type repsenting a closure that returns a String when called.
+/// The type is Send so that it can be sent into a background thread for rendering.
+/// The render closures are used to handle the rendering of windows in a background thread.
 type RenderClosure = Vec <(Box <dyn FnOnce () -> String + Send>, u16, u16, u16)>;
 
 impl Window {
+    /// Creates a new window at the given position with the given size.
+    /// The position is given as (x, y) coordinates.
+    /// The size is given as (width, height).
+    /// The depth is used to determine the rendering order of windows.
+    /// Windows with a higher depth are rendered on top of windows with a lower depth.
     pub fn new (position: (u16, u16), depth: u16, size: (u16, u16)) -> Self {
         Window {
             position,
@@ -609,6 +696,9 @@ impl Window {
         }
     }
 
+    /// Hides the window. Returns true if the window was visible before.
+    /// Returns false if the window was already hidden.
+    /// Additionally, this will only mark the window to update if it was visible before.
     pub fn hide (&mut self) -> bool {
         if self.hidden {  return false;  }
         self.hidden = true;
@@ -616,6 +706,9 @@ impl Window {
         true
     }
 
+    /// Makes the window visible. Returns true if the window was hidden before.
+    /// Returns false if the window was already visible.
+    /// Additionally, this will only mark the window to update if it was hidden before.
     pub fn show(&mut self) -> bool {
         if !self.hidden {  return false;  }
         self.hidden = false;
@@ -623,23 +716,35 @@ impl Window {
         true
     }
 
+    /// Tries to move the window to a new position.
+    /// The window is only updated if the position is different from before.
+    /// If the position is the same as before, nothing happens and the window is not marked
+    /// for an update.
     pub fn r#move (&mut self, new_position: (u16, u16)) {
         if new_position == self.position {  return;  }
         self.position = new_position;
         self.update_all();
     }
 
+    /// Applies multiple colors to the window.
+    /// This will always mark the window to update.
     pub fn colorizes (&mut self, colors: Vec <ColorType>) {
         for color in colors {
             self.color.add_color(color);
         } self.update_all();
     }
 
+    /// Adds a color to the window.
+    /// This will always mark the window to update.
     pub fn colorize (&mut self, color: ColorType) {
         self.color.add_color(color);
         self.update_all();
     }
 
+    /// Tries to add a color to the window.
+    /// Returns true if the color was added.
+    /// Returns false if the color was already present.
+    /// Additionally, this will only mark the window to update if the color was added.
     pub fn try_colorize (&mut self, color: ColorType) -> bool {
         if self.color.contains(&color) {  return false;  }
         self.color.add_color(color);
@@ -647,6 +752,10 @@ impl Window {
         true
     }
 
+    /// Clears all colors and modifiers from the window.
+    /// Returns true if any colors or modifiers were cleared.
+    /// Returns false if the window was already uncolored.
+    /// Additionally, this will only mark the window to update if any colors or modifiers were cleared
     pub fn clear_colors (&mut self) -> bool {
         if self.color.is_uncolored() { return false; }
         self.color = Colored::new(String::new());
@@ -655,11 +764,13 @@ impl Window {
     }
 
     // Adds a border around the window/block
+    /// Adds a border around the window.
     pub fn bordered (&mut self) {
         self.bordered = true;
     }
 
     // Sets/updates the title of the window/block
+    /// Sets or updates the title of the window.
     pub fn titled (&mut self, title: String) {
         self.title = (
             Span::from_tokens(
@@ -671,10 +782,12 @@ impl Window {
         //self.color.ChangeText(title);
     }
 
+    /// Returns if the window has a title set
     pub fn has_title (&self) -> bool {
         self.title.1 != 0
     }
 
+    /// Provides a title with color and modifiers.
     pub fn titled_colored (&mut self, title: Span) {
         let size = title.size();
         self.title = (title, size);
@@ -682,6 +795,9 @@ impl Window {
         self.updated[0] = false;
     }
 
+    /// Tries to resize the window. Returns true if the size was changed.
+    /// Returns false if the size is the same as before.
+    /// Additionally, this will only mark the window to update if the size was changed.
     pub fn resize (&mut self, changed: (u16, u16)) -> bool {
         if self.size == changed {  return false;  }
         self.size = (
@@ -694,6 +810,14 @@ impl Window {
     }
     
     // Clamps a string to a maximum length of visible UTF-8 characters while preserving escape codes
+    /// Clamps a string a maximum length of visible UTF-8 characters while preserving ANSI escape codes.
+    /// This function iterates through the characters of the input string, counting only the visible characters
+    /// and ignoring the characters that are part of ANSI escape codes. When the count of visible characters
+    /// exceeds the specified maximum length, the function stops adding characters to the output string.
+    /// The resulting string contains the original text up to the maximum visible length,
+    /// along with any necessary ANSI escape codes to maintain the original formatting.
+    /// Note: This function assumes that the input string is valid UTF-8 and that ANSI escape codes
+    /// are well-formed (i.e., they start with `\x1b` and end with `m`).
     fn clamp_string_visible_utf_8 (text: &str, max_length: usize) -> String {
         let mut accumulative: String = String::new();
 
@@ -716,6 +840,15 @@ impl Window {
         accumulative
     }
 
+    /// Gets the raw string for a given line index.
+    /// This function handles the rendering of a single line of the window,
+    /// including borders and padding as necessary.
+    /// The function takes in the color for the border, whether the window is bordered,
+    /// the text to render, and the size of the window.
+    /// It returns the fully formatted string for that line, including any ANSI escape codes.
+    /// Note: This function does not handle cursor movement or positioning.
+    /// That is handled externally when rendering the window.
+    /// This function is called from within the closure provided by `get_render_closure`.
     pub fn render_window_slice (color: (String, usize),
                               bordered: bool,
                               render_text: (String, usize),
@@ -765,6 +898,22 @@ impl Window {
         render_closures
     }
 
+    /// Returns a vector of closures which are responsible for returning the stylized and formatted
+    /// text for rendering the window. This closures are cexecuted in a background thread
+    /// to allow for non-blocking rendering of the window. This is the newer version of
+    /// `get_render_deprecated`, which is mostly deprecated in favor of this function.
+    /// This function checks if the window has been updated since the last render.
+    /// If the window has not been updated, it returns an empty vector, indicating that
+    /// no re-rendering is needed. If the window is hidden, it returns closures that render
+    /// blank spaces for each line of the window.
+    /// If the window is visible and has been updated, it generates closures for each
+    /// line of the window, handling borders and titles as necessary.
+    /// Each closure, when executed, will return the rendered text for that line,
+    /// including any ANSI escape codes for colors and styles.
+    /// The closures are returned along with their respective positions and depths
+    /// for rendering in the terminal.
+    /// Note: The closures capture the necessary variables by value to ensure
+    /// they can be executed independently in a background thread.
     pub fn get_render_closure (&mut self) -> RenderClosure {
         if self.was_updated {  return vec![];  }  // no re-rendering is needed
 
@@ -852,7 +1001,15 @@ impl Window {
 
     // Gets the rendered text for the individual window
     // This shouldn't crash when rendering out of bounds unlike certain other libraries...
-    pub fn get_render (&self) -> Vec <String> {
+    /// Gets the rendered text for the individual window as a vector of strings, one for each line.
+    /// This function handles the rendering of borders, titles, and text within the window.
+    /// It ensures that the text fits within the specified size of the window,
+    /// clamping lines as necessary and adding padding to shorter lines.
+    /// The rendered text includes ANSI escape codes for colors and styles.
+    /// This is mostly deprecated in favor of using `get_render_closure` for better performance
+    /// and to allow for background rendering in a separate thread. This is no longer internalely used,
+    /// so any applications of it would need to be a manual call for a reason beyond the base rendering.
+    pub fn get_render_deprecated(&self) -> Vec<String> {
         let mut text = vec![String::new()];
         let color = self.color.get_text(&mut String::new());
 
@@ -929,6 +1086,10 @@ impl Window {
     }
 
     // Replaces a single line with an updated version
+    /// Updates a specific line in the window with a new `Span`.
+    /// The line is identified by its index (0-based).
+    /// If the index is out of bounds, the function does nothing.
+    /// The updated line is marked as needing to be re-rendered.
     pub fn update_line (&mut self, index: usize, span: Span) {
         if index >= self.lines.len() {  return;  }
         self.lines[index] = (span, String::new(), 0);
@@ -937,6 +1098,7 @@ impl Window {
     }
 
     // Appends a single line to the window
+    /// Appends a new line to the window, and marks it as needing to be updated.
     pub fn add_line (&mut self, span: Span) {
         self.lines.push((span, String::new(), 0));
         self.updated.push(false);
@@ -945,6 +1107,11 @@ impl Window {
 
     // Takes a vector of type Span
     // That Span replaces the current set of lines for the window
+    /// Fills the window with a new set of lines, replacing any existing lines.
+    /// This function clears the current lines and adds the new lines from the provided vector.
+    /// Each line is initialized with an empty cached render and a size of 0.
+    /// The `updated` vector is also updated to match the new number of lines,
+    /// marking each line as needing an update.
     pub fn from_lines (&mut self, lines: Vec <Span>) {
         self.lines.clear();// self.updated.clear();
         let mut index = {
@@ -960,6 +1127,11 @@ impl Window {
     }
 
     // checks to see if any lines need to be updated
+    /// Tries to update each line in the window based on the provided vector of `Span`.
+    /// If the number of lines is different from the current number of lines in the window,
+    /// the window is fully updated and all lines are replaced.
+    /// If the number of lines is the same, only the lines that have changed are updated.
+    /// The function returns true if any lines were updated, and false otherwise.
     pub fn try_update_lines (&mut self, mut lines: Vec <Span>) -> bool {
         if lines.len() != self.lines.len() {
             self.update_all();  // making sure every line gets updated (incase it was shrunk)
@@ -986,10 +1158,13 @@ impl Window {
         } self.was_updated
     }
 
+    /// Returns whether the window has no lines.
     pub fn is_empty (&self) -> bool {
         self.lines.is_empty()
     }
 
+    /// Updates all the lines in the window.
+    /// This marks all lines as needing an update, forcing a re-render.
     pub fn update_all (&mut self) {
         for line in self.updated.iter_mut() {
             *line = false;
@@ -997,6 +1172,8 @@ impl Window {
         self.was_updated = false;
     }
 
+    /// Suppresses updates for all lines in the window.
+    /// This marks all lines as updated, preventing any re-rendering.
     pub fn supress_updates (&mut self) {
         for line in self.updated.iter_mut() {
             *line = true;
@@ -1007,6 +1184,9 @@ impl Window {
 
 
 // the main window/application that handles all the windows
+/// A basic Rectangle structure to represent width and height dimensions.
+/// This is used for defining the overall area available for rendering windows
+/// and managing their layout within the terminal.
 #[derive(Clone, Debug, Eq, PartialEq, Default, Hash)]
 pub struct Rect {
     pub width: u16,
@@ -1015,6 +1195,11 @@ pub struct Rect {
 
 // the main application. It stores and handles the active windows
 // It also handles rendering the cumulative sum of the windows
+/// The main application for rendering and managing windows in the terminal.
+/// It stores and handles the active windows, manages their layout,
+/// and handles rendering the cumulative output of all windows.
+/// The App struct also manages terminal state, including entering and exiting
+/// raw mode, enabling mouse capture, and cleaning up the terminal on exit.
 #[derive(Debug, Default)]
 pub struct App {
     area: Rect,
@@ -1027,6 +1212,11 @@ pub struct App {
     reset_windows: bool,
 }
 
+/// Cleans up the terminal state when the App instance is dropped.
+/// This includes disabling mouse capture, exiting raw mode, showing the cursor,
+/// and clearing the terminal screen. This ensures that the terminal is returned
+/// to a normal state after the application exits, preventing any lingering effects
+/// such as hidden cursors or altered screen buffers.
 impl Drop for App {
     fn drop (&mut self) {
         //std::thread::sleep(std::time::Duration::from_secs_f64(5.));
@@ -1049,6 +1239,11 @@ impl Drop for App {
 }
 
 impl App {
+    /// Creates a new instance of the renderer application.
+    /// This function initializes the terminal in raw mode, enables mouse capture,
+    /// and sets up the alternate screen buffer. It also clears the terminal screen
+    /// and hides the cursor. The function returns a Result containing the new App instance
+    /// or an error if any of the terminal operations fail.
     pub fn new () -> std::io::Result<Self> {  // 1049h
         event_handler::enable_mouse_capture();
         crossterm::terminal::enable_raw_mode()?;
@@ -1072,35 +1267,61 @@ impl App {
         })
     }
 
+    /// Checks if a window with the given name exists.
+    /// This function allows for checking the existence of a window by its name.
+    /// It returns true if the window exists, and false otherwise.
+    /// This can be used before calling `get_window_reference` or `get_window_reference_mut`
+    /// to avoid runtime panics and to ensure a window is created (the `Widget` abstractions can
+    /// also offer an extra layer of safety ensuring the given window exists).
     pub fn contains_window (&self, name: String) -> bool {
         self.window_references.contains_key(&name)
     }
 
+    /// Gets a reference to the window with the given name.
+    /// This function allows for reading the properties of the specified window.
+    /// It assumes that the window with the given name exists; if it does not, it
+    /// will panic. Ensure to check for the window's existence using `contains_window`
+    /// before calling this function to avoid potential runtime errors.
     pub fn get_window_reference (&self, name: String) -> &Window {
         &self.active_windows[self.window_references[&name]].0
     }
 
+    /// Gets a mutable reference to the window with the given name.
+    /// This function allows for modifying the properties of the specified window.
+    /// It assumes that the window with the given name exists; if it does not, it
+    /// will panic. Ensure to check for the window's existence using `contains_window`
+    /// before calling this function to avoid potential runtime errors.
     pub fn get_window_reference_mut (&mut self, name: String) -> &mut Window {
         //self.updated = true;  // assuming something is being changed
         &mut self.active_windows[self.window_references[&name]].0
     }
 
+    /// Marks that the window layout has changed and needs to be re-evaluated.
+    /// This function sets the internal flag to indicate that the layout of windows
+    /// has changed, which will trigger a re-rendering of the windows on the next update
     pub fn update_window_layout_order (&mut self) {
         self.change_window_layout = true;
         //self.updated = true;
     }
 
+    /// Gets the current terminal size as (width, height).
+    /// This function returns a Result containing the terminal size or an error if it fails to retrieve it.
     pub fn get_terminal_size (&self) -> Result <(u16, u16), std::io::Error> {
         crossterm::terminal::size()
     }
 
     // Gets the current window size and position
     // This returns a reference to this instance
+    /// Returns the last recorded terminal area as a `Rect`.
     pub fn get_window_area (&self) -> &Rect {
         &self.area
     }
 
     // Adds a new active window
+    /// Adds a new active window to the application.
+    /// The window is identified by a unique name and can be associated with keywords for searching or
+    /// categorization. If the window is not hidden, it will trigger a layout change.
+    /// The function updates the internal state to reflect the addition of the new window.
     pub fn add_window (&mut self, window: Window, name: String, keywords: Vec <String>) {
         if !window.hidden {  self.change_window_layout = true;  }  // if the window is hidden, it shouldn't change anything
         self.window_references.insert(name, self.window_references.len());
@@ -1110,6 +1331,12 @@ impl App {
 
     // Pops an active window.
     // Returns Ok(window) if the index is valid, or Err if out of bounds
+    /// Removes a window by its name.
+    /// Returns `Ok(Window)` if the window was found and removed successfully,
+    /// or `Err(String)` if no window with the specified name exists.
+    /// This function also updates the internal state to reflect the removal,
+    /// including adjusting the indices of remaining windows and marking the layout
+    /// as changed.
     pub fn remove_window (&mut self, name: String) -> Result <Window, String> {
         self.change_window_layout = true;
         self.reset_windows = true;
@@ -1178,6 +1405,10 @@ impl App {
         } slice
     }
 
+    /// Handles any changes needed for rendering the windows, such as resizing or resetting.
+    /// This function checks if the terminal size has changed or if a reset is needed,
+    /// and updates the internal buffer and window states accordingly.
+    /// It also ensures that any previous rendering threads are properly joined before starting a new one.
     fn handle_render_window_changes (&mut self, size: &(u16, u16)) {
         let handle = self.render_handle.take();
         if let Some(handle) = handle {
@@ -1204,6 +1435,10 @@ impl App {
 
     // Renders all the active windows to the consol
     // It also clears the screen from previous writing
+    /// Renders all the active windows to the console.
+    /// Optionally, the terminal size can be provided to avoid recalculating it.
+    /// Returns the number of draw calls made during the render (useful for debugging
+    /// lazy rendering and other optimizations).
     pub fn render (&mut self, terminal_size: Option <(u16, u16)>) -> usize {
         // incase the size is needed and thus calculated elsewhere (to prevent recalculation which is slow)
         // (aka I'm too lazy to update the code I already made.....)
@@ -1332,6 +1567,8 @@ impl App {
         } num_pruned
     }
 
+    /// Removes a given window while also updating the indexes of all other windows
+    /// which were shifted in the vector.
     fn prune_update (&mut self, index: usize, num_pruned: &mut usize) {
         // shifting all the indexes
         let mut to_remove = vec![];
@@ -1372,7 +1609,7 @@ impl App {
     }
 
     /// Gets the names to all windows which contain at least one of the
-    /// specified keywords.
+    /// specified keywords in the form of a reference to an owned `String`.
     pub fn get_windows_by_keywords (&self, keywords: Vec <String>) -> Vec <&String> {
         let mut names = vec![];
         for name in &self.window_references {
@@ -1386,6 +1623,8 @@ impl App {
         names
     }
 
+    /// Gets the names to all windows which contain at least one of the
+    /// specified keywords. This version returns owned Strings instead of references.
     pub fn get_windows_by_keywords_non_ref (&self, keywords: Vec <String>) -> Vec <String> {
         let mut names = vec![];
         for name in &self.window_references {
@@ -1417,6 +1656,7 @@ impl App {
         self.active_windows[window_index].1.contains(keyword)
     }
 
+    /// Returns whether the window layout has changed since the last call to render.
     pub fn changed_window_layout (&self) -> bool {
         self.change_window_layout
     }
