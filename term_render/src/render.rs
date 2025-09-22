@@ -194,7 +194,7 @@ impl ColorType {
             self.get_light_color()
         }
     }
-
+    
     fn get_light_color (&self) -> UniqueColor {
         match self {
             ColorType::Black =>   { UniqueColor::Static(BRIGHT_WHITE) },
