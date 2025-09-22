@@ -1,5 +1,5 @@
 [workspace]
-members = ["proc_macros", "term_render", "examples"]
+members = ["proc_macros", "term_render"]
 resolver = "2"
 
 [workspace.dependencies]
