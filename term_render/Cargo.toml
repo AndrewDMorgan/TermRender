@@ -6,7 +6,7 @@ keywords = ["tui", "terminal", "ui", "widgets"]
 authors = ["Andrew"]
 description = "A terminal UI library for building rich terminal applications in Rust."
 license = "MIT"
-categories = ["gui", "terminal-ui"]
+categories = ["gui"]
 repository = "https://github.com/AndrewDMorgan/TermRender"
 
 [lib]

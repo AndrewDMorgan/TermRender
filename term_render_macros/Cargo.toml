@@ -6,7 +6,7 @@ keywords = ["proc-macro"]
 authors = ["Andrew"]
 description = "Procedural Macros for TermRender."
 license = "MIT"
-categories = ["proc-macro"]
+categories = ["development-tools::procedural-macro-helpers"]
 repository = "https://github.com/AndrewDMorgan/TermRender"
 
 [lib]
