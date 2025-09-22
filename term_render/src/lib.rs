@@ -18,7 +18,7 @@ pub mod widget;
 pub mod widget_impls;
 
 use crate::event_handler::KeyModifiers;
-pub use term_render_macros::send_sync;
+pub use term_render_macros::*;  // re-exporting the macros for easier use
 
 // writing this out gets really verbose really quickly
 
