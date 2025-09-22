@@ -3,7 +3,7 @@ use term_render::widget_impls::WidgetBuilder;
 
 // this acts as the callback that is called every frame
 // this is the entry point and any logic needs to branch out from here
-fn app_callback(app: &mut term_render::App, data: &mut AppData) -> Result<bool, ()> {
+fn app_callback(app: &mut term_render::App<AppData>, data: &mut AppData) -> Result<bool, ()> {
     // place app logic here
     if app.events.read().contains_key_code(KeyCode::Return) {
         return Ok(true);
@@ -35,7 +35,7 @@ async fn main() -> tokio::io::Result<()> {
     let mut scene = term_render::widget::Scene::new();
     
     let (widget, window) =
-        term_render::widget_impls::StaticWidgetBuilder::builder(String::from("name"))
+        term_render::widget_impls::StaticWidgetBuilder::<AppData>::builder(String::from("name"))
             .with_border(true)
             .with_renderer(Box::new(|_size, _position| {
                 Some(vec![])
