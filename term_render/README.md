@@ -103,11 +103,12 @@ Implement the Widget trait to create custom components:
 ```
 use term_render::{Widget, SendSync, event_handler::KeyParser};
 
-struct MyCustomWidget {
+// Where type C is the user defined app data state
+struct MyCustomWidget<C> {
     // Your widget state
 }
 
-impl Widget for MyCustomWidget {
+impl<C> Widget<C> for MyCustomWidget<c> {
     fn get_window_ref(&self) -> String {
         "my_custom_widget".to_string()  // note: each widget instance requires a unique identifyer
     }
