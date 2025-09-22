@@ -83,25 +83,46 @@ impl App {
     /// Create a new instance of the App struct.
     /// This initializes the renderer and event handler.
     pub fn new() -> std::io::Result<Self> {
-        let renderer = std::sync::Arc::new(parking_lot::RwLock::new(render::App::new()?));
-        let events = std::sync::Arc::new(parking_lot::RwLock::new(event_handler::KeyParser::new()));
+        let renderer = send_sync!(render::App::new()?);
+        let events = send_sync!(event_handler::KeyParser::new());
         let (width, height) = renderer.read().get_terminal_size()?;
         
         Ok(Self {
             renderer,
             events,
-            area: std::sync::Arc::new(parking_lot::RwLock::new(render::Rect { width, height })),
-            exit: std::sync::Arc::new(parking_lot::RwLock::new(false)),
+            area: send_sync!(render::Rect { width, height }),
+            exit: send_sync!(false),
             scene: None,
         })
     }
     
-    /// Run the application with a provided update callback function.
-    /// The callback function takes a mutable reference to the App instance and returns a tuple (T, bool).
-    /// The loop continues until the callback function returns true.
-    /// The first element is of type T, representing any returned errors from the callback.
+    /// Run the application with the provided callback function.
+    /// This function sets up the necessary tasks for rendering and event handling,
+    /// and enters the main loop where the provided callback function is called every frame.
+    /// The callback function should return a `Result<bool, T>`, where the bool indicates whether to
+    /// exit the application, and T is the error type.
+    /// If the callback function returns an error, the application will exit and propagate the error.
+    /// The application will also exit if Ctrl+C is detected (a fail safe to ensure the application can be stopped).
+    /// # Parameters
+    /// - data: The application data to be passed to the callback function.
+    /// - update_call_back: The callback function to be called every frame.
+    /// # Example
+    /// ```
+    /// struct Data {
+    ///     pub counter: u32,
+    ///     // other fields...
+    /// }
+    /// let data = Data { counter: 0 };
+    /// let mut app = term_render::App::new().unwrap();
+    /// app.run(data, |data, app_instance| {
+    ///     // the application data can be mutated here to track state
+    ///     data.counter += 1;
+    ///     // application logic here
+    ///     Ok(false)  // return true to exit the app
+    /// }).await.unwrap();
+    /// ```
     pub async fn run<C, T: Sized + std::fmt::Debug>(&mut self, data: C, update_call_back: fn(&mut C, &mut App) -> Result<bool, T>) -> Result<(), T> {
-        let terminal_size_change = std::sync::Arc::new(parking_lot::RwLock::new(true));
+        let terminal_size_change = send_sync!(true);
         let terminal_size_change_clone = terminal_size_change.clone();
         
         let renderer_clone = self.renderer.clone();
@@ -151,6 +172,14 @@ impl App {
     /// This loop continuously calls the update callback function and checks for exit conditions.
     /// If the callback function returns true or if Ctrl+C is detected, the loop exits.
     /// If the callback function returns an error, the loop exits and the error is propagated.
+    /// This function purely handles the logic of the application, while rendering and event handling are managed in separate tasks.
+    /// # Parameters
+    /// - data: The mutable application data to be passed to the callback function.
+    /// - update_call_back: The callback function to be called every frame.
+    /// - sender: A channel sender to signal the rendering task to update.
+    /// - terminal_size_change: A flag to indicate if the terminal size has changed.
+    /// # Returns
+    /// - Result<(), AppErr>: Returns Ok(()) if the loop exits normally, or an AppErr if an error occurs.
     async fn running_loop<C, T: Sized + std::fmt::Debug>(&mut self,
                                                          mut data: C,
                                                          update_call_back: fn(&mut C, &mut App) -> Result<bool, T>,
