@@ -574,8 +574,10 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
 }
 
 /// A widget that renders dynamic content using a provided closure (i.e.
-/// a title box or description).
-/// Suitable for content that doesn't change frequently or in response to events.
+/// a button or interactable component).
+/// Suitable for content that changes frequently or in response to events.
+/// However, other widget implementations may be more appropriate for complex interactions
+/// or multi-button arrangements within a single widget.
 /// `DynamicWidgetBuilder` is the associated builder for creating instances of this widget.
 pub struct DynamicWidget<C> {
     /// The indices of child widgets in the scene graph.
