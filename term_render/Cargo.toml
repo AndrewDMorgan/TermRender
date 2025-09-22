@@ -2,6 +2,11 @@
 name = "term_render"
 version = "0.1.0"
 edition = "2024"
+keywords = ["tui", "terminal", "ui", "widgets"]
+authors = ["Andrew"]
+description = "A terminal UI library for building rich terminal applications in Rust."
+license = "MIT"
+repository = "https://github.com/AndrewDMorgan/TermRender"
 
 [dependencies]
 vte = "0.15.0"  # For escape sequence parsing
