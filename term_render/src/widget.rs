@@ -7,14 +7,15 @@ use crate::{event_handler, render as term_render, render, SendSync};
 /// Provides methods for event handling, rendering, and managing parent-child relationships.
 /// Implementors must provide a window reference and handle updates.
 /// The trait represents an abstracted layer above the base Window struct.
-pub trait Widget {
+/// Type parameter T allows passing application-specific data to widgets during updates.
+pub trait Widget<T> {
     /// Returns a unique identifier string for the widget's associated window.
     /// This connects the widget to its rendering surface in the terminal.
     fn get_window_ref(&self) -> String;
     
     /// Processes input events and updates widget state accordingly.
     /// Static widgets may leave this empty, while interactive widgets should respond to events.
-    fn update_with_events(&mut self, events: &SendSync<event_handler::KeyParser>);
+    fn update_with_events(&mut self, events: &SendSync<event_handler::KeyParser>, data: &mut T);
     
     /// Updates the widget's visual representation based on current state.
     /// Called automatically during render passes to refresh the terminal display.
@@ -67,14 +68,15 @@ impl WidgetErr {
 /// A specialized vector that maintains stable indices after item removal.
 /// Uses a free-list of reserved positions to allow O(1) insertion/removal
 /// while preserving indices of existing elements - crucial for UI scene graphs.
-struct PositionReservedVector<T: Widget + ?Sized> {
+struct PositionReservedVector<C, T: Widget<C> + ?Sized> {
     /// The underlying vector storing widgets or None for reserved positions.
     pub vector: Vec<Option<Box<T>>>,
     /// List of indices that have been removed and can be reused.
     reserved_positions: Vec<usize>,
+    _phantom: std::marker::PhantomData<C>,
 }
 
-impl <T: ?Sized + Widget> PositionReservedVector<T> {
+impl <C, T: ?Sized + Widget<C>> PositionReservedVector<C, T> {
     /// Removes an item at the given index, replacing it with `None`, leaving the indices intact.
     /// Marks the position as reserved for future reuse.
     /// Returns the removed item or an error if index is invalid.
@@ -136,20 +138,21 @@ impl <T: ?Sized + Widget> PositionReservedVector<T> {
 
 /// Manages a collection of widgets and their hierarchical relationships.
 /// Handles rendering coordination, event propagation, and widget lifecycle.
-pub struct Scene {
+pub struct Scene<C> {
     /// All widgets in the scene
-    widgets: PositionReservedVector<dyn Widget>,
+    widgets: PositionReservedVector<C, dyn Widget<C>>,
     /// The hierarchy of widgets (parent-child relationships)
     root_index: Option<usize>,
 }
 
-impl Scene {
+impl<C> Scene<C> {
     /// Creates a new empty scene with no widgets.
     pub fn new() -> Self {
         Scene {
             widgets: PositionReservedVector {
                 vector: Vec::new(),
                 reserved_positions: Vec::new(),
+                _phantom: std::marker::PhantomData,
             },
             root_index: None,
         }
@@ -157,13 +160,13 @@ impl Scene {
     
     /// Returns a reference to the widget at the given index.
     /// Returns an error if the index is out of bounds.
-    pub fn widget_as_ref(&self, index: usize) -> Result<&Box<dyn Widget>, WidgetErr> {
+    pub fn widget_as_ref(&self, index: usize) -> Result<&Box<dyn Widget<C>>, WidgetErr> {
         self.widgets.index(index).ok_or(WidgetErr::new("Index out of bounds"))
     }
     
     /// Returns a mutable reference to the widget at the given index.
     /// Returns an error if the index is out of bounds.
-    pub fn widget_as_mut(&mut self, index: usize) -> Result<&mut Box<dyn Widget>, WidgetErr> {
+    pub fn widget_as_mut(&mut self, index: usize) -> Result<&mut Box<dyn Widget<C>>, WidgetErr> {
         self.widgets.index_mut(index).ok_or(WidgetErr::new("Index out of bounds"))
     }
     
@@ -171,7 +174,7 @@ impl Scene {
     /// Adds a widget to the scene and registers its window with the renderer.
     /// Establishes parent-child relationships and handles root node assignment.
     /// Returns the index where the widget was placed.
-    pub fn add_widget(&mut self, widget: Box<dyn Widget>, window: term_render::Window, app: &mut term_render::App) -> Result<usize, WidgetErr> {
+    pub fn add_widget(&mut self, widget: Box<dyn Widget<C>>, window: term_render::Window, app: &mut term_render::App) -> Result<usize, WidgetErr> {
         app.add_window(window, widget.get_window_ref(), vec![]);
         
         //let index = self.widgets.len();
@@ -234,10 +237,10 @@ impl Scene {
     /// Processes events first, then updates visual representation for each widget.
     /// If a widget's content changes, its parents are also updated to reflect the change.
     /// This ensures the entire scene graph remains consistent and up-to-date.
-    pub fn update_all_widgets(&mut self, events: &SendSync<event_handler::KeyParser>, app: &mut render::App, area: &term_render::Rect) -> Result<(), WidgetErr> {
+    pub fn update_all_widgets(&mut self, events: &SendSync<event_handler::KeyParser>, app: &mut render::App, area: &term_render::Rect, data: &mut C) -> Result<(), WidgetErr> {
         for i in 0..self.widgets.len() {  // the if let skips reserved indices
             if let Some(widget) = self.widgets.index_mut(i) {
-                widget.update_with_events(events);
+                widget.update_with_events(events, data);
                 let window = widget.get_window_ref();
                 if widget.update_render(app.get_window_reference_mut(window), area) && widget.get_parent_index().is_some() {
                     // if the widget changed, update all its parents
@@ -261,13 +264,13 @@ impl Scene {
     
     /// Updates a specific widget and its rendering.
     /// Also triggers updates to parent widgets to maintain consistency if the window is updated.
-    pub fn update_widget(&mut self, index: usize, events: &SendSync<event_handler::KeyParser>, app: &mut term_render::App, area: &term_render::Rect) -> Result<(), WidgetErr> {
+    pub fn update_widget(&mut self, index: usize, events: &SendSync<event_handler::KeyParser>, app: &mut term_render::App, area: &term_render::Rect, data: &mut C) -> Result<(), WidgetErr> {
         if index >= self.widgets.len() || self.widgets.index(index).is_none() {
             return Err(WidgetErr::new("Index out of bounds"));
         }
         
         let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 6"))?);
-        widget.update_with_events(events);
+        widget.update_with_events(events, data);
         let window = app.get_window_reference_mut(widget.get_window_ref());
         if widget.update_render(window, area) && widget.get_parent_index().is_some() {
             self.update_parents(index, app)?;

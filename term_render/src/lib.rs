@@ -49,8 +49,11 @@ impl AppErr {
 
 /// The main application struct that combines rendering and event handling.
 /// This will handle the background work, leaving the user to focus on the application logic.
-/// The generic type T is used for error handling in the update callback function.
-pub struct App {
+/// The generic parameter C represents the application data type, which can be any type defined by the user.
+/// This data is passed to the callback function every frame, allowing the user to maintain and update state.
+/// The application data is stored separately from the App instance, but is linked from the instance.
+/// This allows for a clear separation of concerns.
+pub struct App<C> {
     /// The renderer instance, responsible for drawing to the terminal.
     /// This is wrapped in a SendSync to allow safe sharing and mutation across threads.
     /// The renderer is the core component that manages the terminal display.
@@ -74,10 +77,10 @@ pub struct App {
     /// When present, it allows for the management of UI components and their relationships.
     /// The scene graph is responsible for updating and rendering the widgets based on the current state
     /// and events.
-    pub scene: Option<widget::Scene>,
+    pub scene: Option<widget::Scene<C>>,
 }
 
-impl App {
+impl<C> App<C> {
     /// Create a new instance of the App struct.
     /// This initializes the renderer and event handler.
     pub fn new() -> std::io::Result<Self> {
@@ -119,7 +122,7 @@ impl App {
     ///     Ok(false)  // return true to exit the app
     /// }).await.unwrap();
     /// ```
-    pub async fn run<C, T: Sized + std::fmt::Debug>(&mut self, data: C, update_call_back: fn(&mut C, &mut App) -> Result<bool, T>) -> Result<(), T> {
+    pub async fn run<T: Sized + std::fmt::Debug>(&mut self, data: C, update_call_back: fn(&mut C, &mut App<C>) -> Result<bool, T>) -> Result<(), T> {
         let terminal_size_change = send_sync!(true);
         let terminal_size_change_clone = terminal_size_change.clone();
         
@@ -178,9 +181,9 @@ impl App {
     /// - terminal_size_change: A flag to indicate if the terminal size has changed.
     /// # Returns
     /// - Result<(), AppErr>: Returns Ok(()) if the loop exits normally, or an AppErr if an error occurs.
-    async fn running_loop<C, T: Sized + std::fmt::Debug>(&mut self,
+    async fn running_loop<T: Sized + std::fmt::Debug>(&mut self,
                                                          mut data: C,
-                                                         update_call_back: fn(&mut C, &mut App) -> Result<bool, T>,
+                                                         update_call_back: fn(&mut C, &mut App<C>) -> Result<bool, T>,
                                                          sender: crossbeam::channel::Sender<bool>,
                                                          terminal_size_change: SendSync<bool>
     ) -> Result<(), AppErr> {
@@ -204,7 +207,7 @@ impl App {
             // updating the scene
             if let Some(scene) = &mut self.scene {
                 // updating all widgets' states based on the events and their rendered windows
-                match scene.update_all_widgets(&self.events, &mut *self.renderer.write(), &self.area.read()) {
+                match scene.update_all_widgets(&self.events, &mut *self.renderer.write(), &self.area.read(), &mut data) {
                     Err(e) => {
                         *self.exit.write() = true;  // signal the tasks to exit
                         return Err(AppErr::new(&format!("Failed to update widgets in scene: {:?}", e)));
