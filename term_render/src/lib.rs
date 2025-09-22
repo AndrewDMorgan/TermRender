@@ -1,17 +1,35 @@
 use std::io::Read;
 
 pub use proc_macros;
+/// Handling terminal events (key presses, mouse events, etc.)
+/// This module provides functionality to parse and manage terminal input events.
+/// The actual polling of events is handled externally.
 pub mod event_handler;
+/// Rendering to the terminal (drawing characters, managing screen buffer, etc.)
+/// This module is often referred to as the backend rendering, or original rendering (
+/// as it was the original component before the higher level abstractions were added).
+/// Many of the nuances carried over to the higher level abstractions came from this module.
 pub mod render;
+/// Widgets and scene management (UI components, layout, etc.)
+/// This module provides the building blocks for creating and managing UI components.
+/// It includes a scene graph to manage the hierarchy and relationships between widgets.
 pub mod widget;
+/// Predefined widget implementations and builders (convenience functions for common widgets)
+/// This module provides ready-to-use widget implementations and builders for common UI components.
+/// It simplifies the process of creating and configuring widgets by providing default behaviors and properties.
 pub mod widget_impls;
 
 use crate::event_handler::KeyModifiers;
+use crate::proc_macros::send_sync;
 
 // writing this out gets really verbose really quickly
 
 /// A type alias for a thread-safe, shared, mutable reference to a value of type T.
-/// This uses `Arc` for shared ownership and `RwLock` for interior mutability.
+/// This uses `Arc` for shared ownership and `RwLock` for interior mutability.'
+/// The RwLock type comes from the `parking_lot` crate, which is a more efficient implementation
+/// than the standard library's `std::sync::RwLock`. The `Arc` type used is still from the standard library.
+/// This is used extensively throughout the application to manage shared state safely across threads.
+/// This is also paired with the `send_sync!` macro to simplify the creation of such types.
 pub type SendSync<T> = std::sync::Arc<parking_lot::RwLock<T>>;
 
 #[derive(Debug)]
@@ -35,10 +53,29 @@ impl AppErr {
 /// This will handle the background work, leaving the user to focus on the application logic.
 /// The generic type T is used for error handling in the update callback function.
 pub struct App {
+    /// The renderer instance, responsible for drawing to the terminal.
+    /// This is wrapped in a SendSync to allow safe sharing and mutation across threads.
+    /// The renderer is the core component that manages the terminal display.
+    /// It handles the low-level details of rendering characters, managing the screen buffer,
+    /// and optimizing updates to the terminal.
     pub renderer: SendSync<render::App>,
+    /// The event handler instance, responsible for parsing and managing terminal input events.
+    /// This is wrapped in a SendSync to allow safe sharing and mutation across threads.
+    /// The event handler does not handle the polling of events itself; instead, it provides
+    /// the necessary functionality to parse and manage events that are polled externally (
+    /// this is all handled within the App struct).
     pub events: SendSync<event_handler::KeyParser>,
+    /// The area of the terminal to render to.
     pub area: SendSync<render::Rect>,
+    /// A flag to signal the application to exit.
+    /// This is used to communicate between the main loop and the background tasks (rendering and event handling).
+    /// When set to true, the application will begin the shutdown process.
     exit: SendSync<bool>,
+    /// The scene graph managing the widgets and their layout.
+    /// This is an optional field, as the application may not always have a scene.
+    /// When present, it allows for the management of UI components and their relationships.
+    /// The scene graph is responsible for updating and rendering the widgets based on the current state
+    /// and events.
     pub scene: Option<widget::Scene>,
 }
 
