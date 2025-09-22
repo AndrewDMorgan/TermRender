@@ -1,8 +1,7 @@
-[package]
-name = "term_render_example"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["proc_macros", "term_render", "examples"]
+resolver = "2"
 
-[dependencies]
+[workspace.dependencies]
 tokio = { version = "1.47.1", features = ["io-util", "macros", "rt-multi-thread", "io-std", "time"] }
 term_render = { path = "term_render" }

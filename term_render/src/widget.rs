@@ -90,7 +90,7 @@ impl <T: ?Sized + Widget> PositionReservedVector<T> {
         self.vector.insert(index, None);  // replace with a default value to maintain indices
         self.reserved_positions.push(index);
         
-        Ok(item.unwrap_or(Err(WidgetErr::new("Invalid widget index"))?))
+        Ok(item.unwrap_or(Err(WidgetErr::new("Invalid widget index - 1"))?))
     }
     
     /// Pushes an item into the vector, reusing reserved positions if available.
@@ -180,8 +180,8 @@ impl Scene {
         
         // adding the optional parent-child relationship (only the root node can be parentless)
         if let Some(parent_index) = &parent_index {
-            self.widgets.index_mut(*parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).add_child_index(index);
-            self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).set_parent_index(Some(*parent_index));
+            self.widgets.index_mut(*parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 2"))?).add_child_index(index);
+            self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 3"))?).set_parent_index(Some(*parent_index));
         } else {
             if self.root_index.is_some() {
                 return Err(WidgetErr::new("Only one root widget allowed"));
@@ -206,18 +206,20 @@ impl Scene {
         app.remove_window(self.widgets.index(index).unwrap().get_window_ref()).unwrap();
         
         // updating the parents windows
-        self.update_parents(index, app)?;
+        if self.widgets.index(index).unwrap().get_parent_index().is_some() {
+            self.update_parents(index, app)?;
+        }
         
         // remove from parent's children list
-        if let Some(parent_index) = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_parent_index() {
-            self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).remove_child_index(index);
+        if let Some(parent_index) = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 10"))?).get_parent_index() {
+            self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 4"))?).remove_child_index(index);
         } else {
             // if it's the root, clear the root index
             self.root_index = None;
         }
         
         // remove all children recursively
-        let children = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_children_indexes();
+        let children = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 5"))?).get_children_indexes();
         for &child_index in &children {
             self.remove_widget(child_index, app)?;
         }
@@ -237,7 +239,7 @@ impl Scene {
             if let Some(widget) = self.widgets.index_mut(i) {
                 widget.update_with_events(events);
                 let window = widget.get_window_ref();
-                if widget.update_render(app.get_window_reference_mut(window), area) {
+                if widget.update_render(app.get_window_reference_mut(window), area) && widget.get_parent_index().is_some() {
                     // if the widget changed, update all its parents
                     self.update_parents(i, app)?;
                 }
@@ -264,10 +266,10 @@ impl Scene {
             return Err(WidgetErr::new("Index out of bounds"));
         }
         
-        let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?);
+        let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 6"))?);
         widget.update_with_events(events);
         let window = app.get_window_reference_mut(widget.get_window_ref());
-        if widget.update_render(window, area) {
+        if widget.update_render(window, area) && widget.get_parent_index().is_some() {
             self.update_parents(index, app)?;
         }
         
@@ -277,9 +279,9 @@ impl Scene {
     /// Updates only the rendering of a specific widget without processing events.
     /// Useful for visual-only changes that don't affect widget state.
     pub fn update_widget_renderer(&mut self, index: usize, app: &mut term_render::App, area: &term_render::Rect) -> Result<(), WidgetErr> {
-        let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?);
+        let widget = self.widgets.index_mut(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 7"))?);
         let window = app.get_window_reference_mut(widget.get_window_ref());
-        if widget.update_render(window, area) {
+        if widget.update_render(window, area) && widget.get_parent_index().is_some() {
             self.update_parents(index, app)?;
         }
         Ok(())
@@ -288,8 +290,8 @@ impl Scene {
     /// Recursively updates all parent widgets of the widget at the given index.
     /// Ensures visual consistency when child widgets change.
     fn update_parents(&mut self, index: usize, app: &mut term_render::App) -> Result<(), WidgetErr> {
-        if let Some(parent_index) = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?).get_parent_index() {
-            let widget = self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index"))?);
+        if let Some(parent_index) = self.widgets.index(index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 8"))?).get_parent_index() {
+            let widget = self.widgets.index_mut(parent_index).unwrap_or(Err(WidgetErr::new("Invalid widget index - 9"))?);
             app.get_window_reference_mut(widget.get_window_ref()).update_all();
             self.update_parents(parent_index, app)?;
         } Ok(())

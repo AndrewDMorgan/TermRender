@@ -1,6 +1,4 @@
 use std::io::Read;
-
-pub use proc_macros;
 /// Handling terminal events (key presses, mouse events, etc.)
 /// This module provides functionality to parse and manage terminal input events.
 /// The actual polling of events is handled externally.
@@ -20,7 +18,7 @@ pub mod widget;
 pub mod widget_impls;
 
 use crate::event_handler::KeyModifiers;
-use crate::proc_macros::send_sync;
+pub use proc_macros::send_sync;
 
 // writing this out gets really verbose really quickly
 

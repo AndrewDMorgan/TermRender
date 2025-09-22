@@ -8,10 +8,14 @@ description = "A terminal UI library for building rich terminal applications in 
 license = "MIT"
 repository = "https://github.com/AndrewDMorgan/TermRender"
 
+[lib]
+name = "term_render"
+path = "src/lib.rs"
+
 [dependencies]
 vte = "0.15.0"  # For escape sequence parsing
 crossterm = "0.29.0"
 crossbeam = "0.8.4"
 parking_lot = "0.12.4"
-proc_macros = { path = "proc_macros" }
+proc_macros = { path = "../proc_macros" }
 tokio = { version = "1.47.1", features=["io-util", "macros", "rt-multi-thread", "io-std", "time", "fs", "net"] }
