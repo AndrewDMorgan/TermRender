@@ -2,6 +2,12 @@
 name = "term_render_macros"
 version = "0.1.0"
 edition = "2024"
+keywords = ["proc-macro"]
+authors = ["Andrew"]
+description = "Procedural Macros for TermRender."
+license = "MIT"
+categories = ["proc-macro"]
+repository = "https://github.com/AndrewDMorgan/TermRender"
 
 [lib]
 proc-macro = true
