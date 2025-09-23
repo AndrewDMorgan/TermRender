@@ -205,9 +205,9 @@ impl<C> App<C> {
             }
             
             // updating the scene
-            if let Some(scene) = &mut self.scene {
+            if let Some(mut scene) = self.scene.take() {
                 // updating all widgets' states based on the events and their rendered windows
-                match scene.update_all_widgets(&self.events, &mut *self.renderer.write(), &self.area.read(), &mut data) {
+                match scene.update_all_widgets(self, &mut data) {
                     Err(e) => {
                         *self.exit.write() = true;  // signal the tasks to exit
                         return Err(AppErr::new(&format!("Failed to update widgets in scene: {:?}", e)));
@@ -218,6 +218,7 @@ impl<C> App<C> {
                 if *terminal_size_change.read() {
                     scene.force_update_all_widgets(&mut *self.renderer.write());
                 }
+                self.scene = Some(scene);
             }
             
             self.events.write().clear_events();
