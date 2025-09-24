@@ -279,7 +279,7 @@ impl<C> App<C> {
     }
     
     /// Handles rendering for a single frame.
-    async fn render_handling(renderer: SendSync<render::App>, area: SendSync<render::Rect>, terminal_size_change: &SendSync<bool>) -> Result<(), AppErr> {
+    async fn render_handling(renderer: &SendSync<render::App>, area: &SendSync<render::Rect>, terminal_size_change: &SendSync<bool>) -> Result<(), AppErr> {
         let ar = match renderer.read().get_terminal_size() {
             Err(e) => {
                 return Err(AppErr::new(&format!("Failed to get terminal size: {:?}", e)));
@@ -309,9 +309,7 @@ impl<C> App<C> {
         let exit_clone = exit.clone();
         let result_handle: tokio::task::JoinHandle<Result<(), AppErr>> = tokio::spawn(async move {
             loop {
-                let renderer = renderer.clone();
-                let area = area.clone();
-                Self::render_handling(renderer.0, area, &terminal_size_change).await?;
+                Self::render_handling(&renderer.0, &area, &terminal_size_change).await?;
                 if *exit_clone.read() {  break;  }
                 match renderer.1.recv() {
                     // the if is necessary to prevent errors whenever exiting (this would wait for a non-existent signal)
