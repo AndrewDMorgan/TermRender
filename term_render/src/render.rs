@@ -1479,7 +1479,7 @@ impl App {
 
             // sorting the calls by action row (and left to right for same row calls)
             // drawCall.3 is the depth; higher numbers will be rendered last thus being on top (each depth is a unique layer)
-            draw_calls.sort_by_key(|draw_call| draw_call.2 * size.0 + draw_call.1 + draw_call.3 * size.0 * size.1);
+            draw_calls.sort_by_key(|draw_call| draw_call.2 as usize * size.0 as usize + draw_call.1 as usize + draw_call.3 as usize * size.0 as usize * size.1 as usize);
 
             // iterating through the calls (consuming drawCalls)
             let write_buffer = &mut *buffer.write();
