@@ -172,6 +172,21 @@ impl <C, T: ?Sized + Widget<C>> PositionReservedVector<C, T> {
         }
     }
 
+    pub fn as_mut_widget_ptr(&mut self, index: usize) {
+        if index >= self.vector.len() {
+            return;
+        }
+        if let Some(widget) = &self.vector[index] {
+            // We know that T is dyn Widget<C> in practice
+            // Use a helper function to get the raw pointer safely
+            let raw_ptr = Self::get_widget_raw_ptr(widget);
+            let queue = WidgetEventQueuer::new(raw_ptr);
+            self.event_queuer = Some(queue);
+        } else {
+            self.event_queuer = None;
+        }
+    }
+
     pub fn take(&mut self, index: usize) -> Option<Box<T>> {
         if index >= self.vector.len() {
             return None;
@@ -329,10 +344,10 @@ impl<C> Scene<C> {
                 None => return Err(WidgetErr::new("Invalid widget index - 2")),
             }
             
-            match self.widgets.index_mut(index) {
+            /*match self.widgets.index_mut(index) {
                 Some(child_widget) => child_widget.set_parent_index(Some(*parent_index)),
                 None => return Err(WidgetErr::new("Invalid widget index - 3")),
-            }
+            }*/  // isn't it litterally already set above??
         } else {
             if self.root_index.is_some() {
                 return Err(WidgetErr::new("Only one root widget allowed"));
@@ -398,20 +413,38 @@ impl<C> Scene<C> {
     /// This ensures the entire scene graph remains consistent and up-to-date.
     pub fn update_all_widgets(&mut self, app_main: &mut crate::App<C>, data: &mut C) -> Result<(), WidgetErr> {
         for i in 0..self.widgets.len() {  // the if let skips reserved indices
-            if let Some(widget_safe) = self.widgets.take(i) {
-                let mut widget = match self.widgets.event_queuer.take() {
-                    None => return Err(WidgetErr::new("Failed to gather the event queuer")),
-                    Some(ptr) => ptr,
-                };
-                self.widgets.replace(i, Some(widget_safe));  // put the widget back
-                
-                widget.update_with_events(data, app_main, self);
-                let window = widget.get_window_ref();
-                if widget.update_render(app_main.renderer.write().get_window_reference_mut(window), &*app_main.area.read()) && widget.get_parent_index().is_some() {
-                    // if the widget changed, update all its parents
-                    self.update_parents(i, &mut *app_main.renderer.write())?;
-                }
+            if self.widgets.index(i).is_none() {  continue;  }
+            
+            self.widgets.as_mut_widget_ptr(i);
+            let mut widget = match self.widgets.event_queuer.take() {
+                None => return Err(WidgetErr::new("Failed to gather the event queuer")),
+                Some(ptr) => ptr,
+            };
+            //self.widgets.replace(i, Some(widget_safe));  // put the widget back
+            
+            widget.update_with_events(data, app_main, self);
+            let window = widget.get_window_ref();
+            if widget.update_render(app_main.renderer.write().get_window_reference_mut(window), &*app_main.area.read()) && widget.get_parent_index().is_some() {
+                // if the widget changed, update all its children
+                self.update_children(i, &mut *app_main.renderer.write())?;
             }
+        } Ok(())
+    }
+
+    /// Recursively updates all child widgets of the widget at the given index.
+    /// Ensures visual consistency when parent widgets change.
+    fn update_children(&mut self, index: usize, app: &mut term_render::App) -> Result<(), WidgetErr> {
+        let children = match self.widgets.index(index){
+            Some(w) => w,
+            None => return Err(WidgetErr::new("Invalid widget index - 42")),
+        }.get_children_indexes();
+        for &child_index in &children {
+            let widget = match self.widgets.index_mut(child_index) {
+                Some(w) => w,
+                None => return Err(WidgetErr::new("Invalid widget index - 13")),
+            };
+            app.get_window_reference_mut(widget.get_window_ref()).update_all();
+            self.update_children(child_index, app)?;
         } Ok(())
     }
     
