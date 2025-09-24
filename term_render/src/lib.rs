@@ -19,6 +19,7 @@ pub mod widget_impls;
 
 use crate::event_handler::KeyModifiers;
 pub use term_render_macros::*;  // re-exporting the macros for easier use
+pub use render::Colorize;  // making sure the colorize trait is included
 
 // writing this out gets really verbose really quickly
 
