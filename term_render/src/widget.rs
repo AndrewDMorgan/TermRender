@@ -436,6 +436,10 @@ impl<C> Scene<C> {
             None => return Err(WidgetErr::new("Invalid widget index - 5")),
         }.get_children_indexes();
         for &child_index in &children {
+            match self.widgets.index_mut(child_index) {
+                Some(child_widget) => child_widget.set_parent_index(None),
+                None => return Err(WidgetErr::new("Invalid child widget index - 82")),
+            }
             self.remove_widget(child_index, app)?;
         }
         
