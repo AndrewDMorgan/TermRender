@@ -58,7 +58,7 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
     ///     .build(&Rect::default())  // replace &Rect with the actual terminal size (such as `&app.area.read()`)
     ///     .expect("Invalid widget position or size.");
     /// ```
-    fn build(self, display_area: &crate::render::Rect) -> Result<(Box<dyn Widget<C>>, crate::render::Window), WidgetBuilderError> {
+    fn build(mut self, display_area: &crate::render::Rect) -> Result<(Box<dyn Widget<C>>, crate::render::Window), WidgetBuilderError> {
         let (position, size) = self.size_and_position.get_size_and_position(display_area);
         if size.0 == 0 || size.1 == 0 || position.0 == 0 || position.1 == 0 {
             return Err(WidgetBuilderError { details: String::from("Position and/or size cannot be zero when building a new widget or window.") })
@@ -239,7 +239,7 @@ impl<C> ButtonWidget<C> {
     /// *When possible, an implementation of `WidgetBuilder` should be used instead, both for safety,
     /// simplicity, and consistency.*
     pub fn new(name: String,
-               size_and_position: SizeAndPosition,
+               mut size_and_position: SizeAndPosition,
                render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
                depth: u16,
                display_area: &crate::render::Rect,
@@ -408,6 +408,11 @@ impl<C> Widget<C> for ButtonWidget<C> {
     /// Sets the parent widget index for this widget, or None for a root node.
     fn set_parent_index(&mut self, index: Option<usize>) {
         self.parent_index = index;
+    }
+    
+    fn is_collided(&self, position: (u16, u16)) -> bool {
+        let (size, pos) = self.size_and_position.get_last();
+        position.0 >= pos.0 && position.0 < pos.0 + size.0 && position.1 >= pos.1 && position.1 < pos.1 + size.1
     }
 }
 

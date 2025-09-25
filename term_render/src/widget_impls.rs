@@ -60,6 +60,9 @@ pub struct SizeAndPosition {
     /// The final position is calculated as:
     /// `final_position = (terminal_area * position_area_percent) + position_offset`
     pub position_area_percent: (f32, f32),  // percentage of the terminal area (0.5 is the center)
+    
+    /// Caches the last calculated size and position to avoid redundant calculations.
+    pub last_size_pos: ((u16, u16), (u16, u16)), // caching the last calculated size and position
 }
 
 impl SizeAndPosition {
@@ -75,6 +78,7 @@ impl SizeAndPosition {
             position_offset: (position.0 as i16, position.1 as i16),
             size_area_percent: (0.0, 0.0),
             position_area_percent: (0.0, 0.0),
+            last_size_pos: ((0, 0), (0, 0)),
         }
     }
     
@@ -90,6 +94,7 @@ impl SizeAndPosition {
             position_offset,
             size_area_percent,
             position_area_percent,
+            last_size_pos: ((0, 0), (0, 0)),
         }
     }
     
@@ -99,14 +104,20 @@ impl SizeAndPosition {
     /// # Returns
     /// Tuple containing ((width, height), (x, y)) coordinates
     ///  - *Note: static layout configurations will always return the values regardless of the inputted area.*
-    pub fn get_size_and_position(&self, area: &crate::render::Rect) -> ((u16, u16), (u16, u16)) {
+    pub fn get_size_and_position(&mut self, area: &crate::render::Rect) -> ((u16, u16), (u16, u16)) {
         let width = (((area.width as f32) * self.size_area_percent.0) as i16 + self.size_offset.0) as u16;
         let height = (((area.height as f32) * self.size_area_percent.1) as i16 + self.size_offset.1) as u16;
         
         let x = (((area.width as f32) * self.position_area_percent.0) as i16 + self.position_offset.0) as u16;
         let y = (((area.height as f32) * self.position_area_percent.1) as i16 + self.position_offset.1) as u16;
         
+        self.last_size_pos = ((width, height), (x, y));
+        
         ((width, height), (x, y))
+    }
+    
+    pub fn get_last(&self) -> ((u16, u16), (u16, u16)) {
+        self.last_size_pos
     }
 }
 

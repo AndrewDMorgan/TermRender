@@ -115,6 +115,11 @@ impl<C> Widget<C> for WidgetEventQueuer<C> {
     fn set_parent_index(&mut self, index: Option<usize>) {
         unsafe {  (*self.owner).set_parent_index(index);  }
     }
+    
+    /// Checks if a given position collides with the widget's area.
+    fn is_collided(&self, position: (u16, u16)) -> bool {
+        unsafe {  (*self.owner).is_collided(position)  }
+    }
 }
 
 /// Core trait defining the interface for all UI widgets in the scene graph.
@@ -155,6 +160,9 @@ pub trait Widget<T> {
     
     /// Sets or clears the parent widget index for hierarchy management.
     fn set_parent_index(&mut self, index: Option<usize>);
+    
+    /// Checks if a given position collides with the widget's area.
+    fn is_collided(&self, position: (u16, u16)) -> bool;
 }
 
 /// Error type for widget operations, containing descriptive error messages.
@@ -556,6 +564,25 @@ impl<C> Scene<C> {
             app.get_window_reference_mut(widget.get_window_ref()).update_all();
             self.update_parents(parent_index, app)?;
         } Ok(())
+    }
+    
+    /// Checks if a click at the given position is blocked by any child widgets of the widget at the given index.
+    /// Returns `Some(true)` if blocked, `Some(false)` if not blocked, or `None` if the index is invalid.
+    /// This is useful for determining if a click event should be processed by the widget or ignored due to overlap.
+    pub fn is_click_blocked(&self, index: usize, position: (u16, u16)) -> Option<bool> {
+        let children = &self.widgets.index(index)?.get_children_indexes();
+        for child in children {
+            let widget = self.widgets.index(*child)?;
+            if widget.is_collided(position) {
+                return Some(true);
+            }
+            // recursively check children
+            if let Some(blocked) = self.is_click_blocked(*child, position) {
+                if blocked {
+                    return Some(true);
+                }
+            }
+        } Some(false)  // None means bad index, false means it's not blocked
     }
 }
 

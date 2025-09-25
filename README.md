@@ -96,7 +96,9 @@ TermRender provides a flexible widget system:
 
 ## Built-in Widgets
 * StaticWidget: Basic widget with custom rendering logic
-* DynamicWidget: An interactable widget. In the future, more advanced versions will be implimented which will default as buttons or other such higher-level widgets.
+* DynamicWidget: An interactable widget. In the future, more advanced versions will be implemented which will default as buttons or other such higher-level widgets.
+* ButtonWidget: A simple button with automatic click handling.
+* More coming soon!
 
 * Creating Custom Widgets
 Implement the Widget trait to create custom components:
