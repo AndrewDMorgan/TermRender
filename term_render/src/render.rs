@@ -4,6 +4,7 @@ use std::io::Write;
 
 // litterally just for enabling or disabling mouse support and stuff
 use crate::event_handler;
+use crossbeam;
 
 
 // static color/mod pairs for default ascii/ansi codes
@@ -1210,6 +1211,8 @@ pub struct App {
     render_handle: Option <std::thread::JoinHandle <()>>,
     buffer: std::sync::Arc <parking_lot::RwLock <String>>,
     reset_windows: bool,
+    concluded_receiver: Option<crossbeam::channel::Receiver <()>>,
+    pub concluded_sender: Option<crossbeam::channel::Sender <()>>,
 }
 
 /// Cleans up the terminal state when the App instance is dropped.
@@ -1219,7 +1222,18 @@ pub struct App {
 /// such as hidden cursors or altered screen buffers.
 impl Drop for App {
     fn drop (&mut self) {
-        //std::thread::sleep(std::time::Duration::from_secs_f64(5.));
+        // should prevent clearing the screen if an error was thrown
+        let error = if let Some(receiver) = self.concluded_receiver.take() {
+            if receiver.try_recv().is_err() {
+                // an error was thrown
+                true
+                // preventing clearing instead of sleeping for a much better experience
+                //std::thread::sleep(std::time::Duration::from_secs_f64(5.));
+            } else {
+                false
+            }
+        } else {  false  };
+        if !error {  print!("\x1B[?1049l");  }
         
         event_handler::disable_mouse_capture();
         crossterm::terminal::disable_raw_mode().unwrap();
@@ -1227,11 +1241,8 @@ impl Drop for App {
         print!("{SHOW_CURSOR}");  // showing the cursor
 
         // clearing the screen
-        //print!("\x1B[2J\x1B[H\x1b");
         print!("\x1B[0m");
-        print!("\x1B[?1049l");
         print!("\x1B[2K\x1B[E");
-        print!("\x1Bc");
 
         // I don't really care if an error is thrown at this point
         let _ = std::io::stdout().flush();
@@ -1255,6 +1266,8 @@ impl App {
         let mut stdout = std::io::stdout();
         crossterm::execute!(stdout, crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
         
+
+        let (sender, receiver) = crossbeam::channel::unbounded();
         Ok(App {
             area: Rect::default(),
             active_windows: vec![],
@@ -1264,6 +1277,8 @@ impl App {
             render_handle: None,
             buffer: std::sync::Arc::new(parking_lot::RwLock::new(String::new())),
             reset_windows: false,
+            concluded_receiver: Some(receiver),
+            concluded_sender: Some(sender),
         })
     }
 

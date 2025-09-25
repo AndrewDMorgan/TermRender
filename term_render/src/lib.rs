@@ -148,25 +148,43 @@ impl<C> App<C> {
         }
         
         //println!("Checking for errors");
+        let mut error = false;
         *self.exit.write() = true;  // signal the tasks to exit
         match events_handle.await {
             Ok(_) => {},
             Err(e) => {
                 println!("Error in event handling task: {:?}", e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                error = true;
             },
         }
         match render_handle.await {
             Ok(Err(e)) => {
                 println!("App Error in rendering task: {:?}", e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                error = true;
             },
             Ok(_) => {},
             Err(e) => {
                 println!("Error in rendering task: {:?}", e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                error = true;
             },
         }
+
+        if error {
+            // panicing since the user type isn't known at compile time and can't be easily returned internally
+            // panicing is necessary to ensure the app during drop doesn't clear the screen
+            panic!("An error occurred during execution, see above for details.");
+        }
+
+        if let Some(sender) = self.renderer.write().concluded_sender.take() {
+            match sender.send(()) {
+                Ok(_) => {},
+                Err(e) => {
+                    // Same reason for panicing as above
+                    panic!("Unable to call channel sender: {:?}", e);
+                }
+            }
+        }
+
         Ok(())
     }
     
