@@ -40,7 +40,7 @@ pub struct ButtonWidgetBuilder<C> {
     /// This closure is called during event updates and receives references to the widget,
     /// application data, the app instance, the scene, and the current button state.
     /// By default, there is no update handler, meaning the widget won't respond to events.
-    update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>, &ButtonState)>>,
+    update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>, &ButtonState)>>,
 
     __phantom: std::marker::PhantomData<C>,
 }
@@ -182,7 +182,7 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
     /// Sets the widget's update handler closure. This closure is called during event updates.
     /// The closure receives references to the widget itself, the event parser, and mutable application data.
     /// By default, there is no update handler, meaning the widget won't respond to events.
-    type FunctionType = Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>, &ButtonState)>;
+    type FunctionType = Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>, &ButtonState)>;
     fn with_update_handler(mut self, handler: Self::FunctionType) -> Self {
         self.update_handler = Some(handler);
         self
@@ -216,7 +216,7 @@ pub struct ButtonWidget<C> {
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 
     /// Optional closure that handles updates to the widget's state.
-    pub update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>, &ButtonState)>>,
+    pub update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>, &ButtonState)>>,
 
 
     /// The current interaction state of the button.
@@ -277,7 +277,7 @@ impl<C> Widget<C> for ButtonWidget<C> {
     /// The closure receives references to the widget itself, the event parser, mutable application data,
     /// and also the button's state (`ButtonState`) because it's a Button widget.
     /// If no update handler is set, this method performs no action.
-    /// Because this is a special widget implimentation representing a button, it also
+    /// Because this is a special widget implementation representing a button, it also
     /// handles updating the button's state based on mouse events. The states are:
     /// - Normal: Default state when not interacted with.
     /// - Hovered: When the mouse is over the button.
@@ -287,12 +287,12 @@ impl<C> Widget<C> for ButtonWidget<C> {
     /// 
     /// The state transitions are managed internally based on mouse events. The entire
     /// widget as a whole represents the button's 'hit box'.
-    fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut crate::widget::Scene<C>) {
+    fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut Scene<C>) {
         // updating the button's state based on mouse events
         let (size, position) = self.size_and_position.get_size_and_position(&app.area.read());
         match self.button_state.as_ref() {
             ButtonState::Normal => {
-                // checking if the mouse if now hovering, or clicking
+                // checking if the mouse is now hovering, or clicking
                 if let Some(event) = &app.events.read().mouse_event {
                     if event.position.0 > position.0 && event.position.0 < position.0 + size.0 &&
                        event.position.1 > position.1 && event.position.1 < position.1 + size.1 {
@@ -339,7 +339,7 @@ impl<C> Widget<C> for ButtonWidget<C> {
             },
             ButtonState::Hovered => {
                 // checking if the mouse is still hovering and if it was clicked
-                                // checking if the mouse if now hovering, or clicking
+                // checking if the mouse is now hovering, or clicking
                 if let Some(event) = &app.events.read().mouse_event {
                     if event.position.0 > position.0 && event.position.0 < position.0 + size.0 &&
                        event.position.1 > position.1 && event.position.1 < position.1 + size.1 {

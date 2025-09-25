@@ -31,7 +31,7 @@ pub trait WidgetBuilder<C> {
     /// Sets the widget's custom renderer closure
     fn with_renderer(self, renderer: Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>) -> Self;
     /// Creates a new builder instance with the provided unique name identifier.
-    /// It's recommended that the identifying name is as inputed, and not
+    /// It's recommended that the identifying name is as inputted, and not
     /// modified, to avoid conflicts if the user manually attempts to access the widget.
     fn builder(name: String) -> Self;
     /// Sets the widget's SizeAndPosition configuration directly.

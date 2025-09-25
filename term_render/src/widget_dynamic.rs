@@ -22,7 +22,7 @@ pub struct DynamicWidgetBuilder<C> {
     /// The custom render function for the widget, if any.
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 
-    update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>>,
+    update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>>,
 
     __phantom: std::marker::PhantomData<C>,
 }
@@ -163,8 +163,8 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
     /// Sets the widget's update handler closure. This closure is called during event updates.
     /// The closure receives references to the widget itself, the event parser, and mutable application data.
     /// By default, there is no update handler, meaning the widget won't respond to events.
-    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>;
-    fn with_update_handler(mut self, handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>) -> Self {
+    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>;
+    fn with_update_handler(mut self, handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>) -> Self {
         self.update_handler = Some(handler);
         self
     }
@@ -200,7 +200,7 @@ pub struct DynamicWidget<C> {
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 
     /// Optional closure that handles updates to the widget's state.
-    pub update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>>,
+    pub update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>>,
 
     __phantom: std::marker::PhantomData<C>,
 }
@@ -255,7 +255,7 @@ impl<C> Widget<C> for DynamicWidget<C> {
     /// Handles event updates by invoking the user-provided update handler closure, if any.
     /// The closure receives references to the widget itself, the event parser, and mutable application data.
     /// If no update handler is set, this method performs no action.
-    fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut crate::widget::Scene<C>) {
+    fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut Scene<C>) {
         if let Some(update_handler) = self.update_handler.take() {
             update_handler(self, data, app, scene);
             self.update_handler = Some(update_handler);

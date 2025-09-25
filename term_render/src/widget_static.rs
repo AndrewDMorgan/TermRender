@@ -154,8 +154,8 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
     }
 
     /// Static widgets do not respond to events, so this is a no-op that returns self.
-    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>;
-    fn with_update_handler(self, _handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>) -> Self {
+    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>;
+    fn with_update_handler(self, _handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>) -> Self {
         // static widgets don't need an update handler
         self
     }
@@ -240,7 +240,7 @@ impl<C> Widget<C> for StaticWidget<C> {
     
     // for handling updates (a static widget would just have this empty)
     /// Handles event updates (no-op for static widgets as they don't respond to events)
-    fn update_with_events(&mut self, _data: &mut C, _app: &mut crate::App<C>, _scene: &mut crate::widget::Scene<C>) {
+    fn update_with_events(&mut self, _data: &mut C, _app: &mut crate::App<C>, _scene: &mut Scene<C>) {
         // the static widget doesn't need to change
     }
     
