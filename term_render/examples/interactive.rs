@@ -53,7 +53,7 @@ async fn main() -> tokio::io::Result<()> {
                 let pressed = if let Some(event) = &app.events.read().mouse_event {
                     if event.event_type == term_render::event_handler::MouseEventType::Left &&
                        event.state == term_render::event_handler::MouseState::Press &&
-                       event.position.0 > 10 && event.position.1 > 10 && event.position.0 < 60 && event.position.1 < 20 {
+                       widget.is_collided(event.position) {
                         // the button/widget was clicked
                         !scene.is_click_blocked(widget_index, event.position).unwrap_or(false)
                     } else {  false  }
