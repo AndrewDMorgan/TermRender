@@ -3,12 +3,30 @@
 // handles widgets and all between
 use crate::{render as term_render, render, App};
 
-
-
 // I don't like the all unsafe, but I don't see an easy way around it without
 // complicating the API and usage significantly.
 // The Scene calls the event update, but needs to pass itself and a reference to some of its data.
 // This is pretty much just a wrapper for a pointer to the actual widget, hiding the nasty unsafe stuff.
+/// A struct that manages event queuing for a widget within a scene.
+///
+/// `WidgetEventQueuer` holds a raw pointer to a widget, allowing event handling
+/// without violating Rust's borrowing rules. The lifetime safety is ensured by
+/// retaining ownership within the scene, and passing ownership of the
+/// `WidgetEventQueuer` instead of the widget itself. This design prevents
+/// multiple mutable references and ensures that the scene outlives any
+/// `WidgetEventQueuer` instances.
+///
+/// # Type Parameters
+/// - `C`: The user-defined data type associated with the main application.
+///
+/// # Safety
+/// The raw pointer to the widget (`owner`) is safe as long as the scene is not
+/// dropped while a `WidgetEventQueuer` exists. Dropping the queuer removes
+/// references to the widget pointer.
+///
+/// # Fields
+/// - `owner`: Raw pointer to the widget implementing the `Widget` trait.
+/// - `_phantom`: Marker to associate the context type `C` with the struct.
 pub struct WidgetEventQueuer<C> {
     // The following fields should cover the returned data fields of the Widget trait.
     // They are raw pointers to avoid multiple references issues (even though multiple
@@ -19,12 +37,27 @@ pub struct WidgetEventQueuer<C> {
     // Therefore, the lifetime is still attached to the scene, and not the WidgetEventQueuer itself.
     // The user shouldn't easily be able to drop the scene while holding onto an WidgetEventQueuer.
     // Dropping the WidgetEventQueuer will remove references to the pointers.
+    
+    /// Raw pointer to the widget implementing the `Widget` trait.
     owner: *mut dyn Widget<C>,
 
     _phantom: std::marker::PhantomData<C>,
 }
 
 impl<C> WidgetEventQueuer<C> {
+    /// Creates a new `WidgetEventQueuer` instance with the specified owner.
+    ///
+    /// # Arguments
+    ///
+    /// * `owner` - A raw pointer to a type that implements the `Widget<C>` trait. This represents the owner of the event queuer.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `WidgetEventQueuer` associated with the given owner.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the `owner` pointer remains valid for the lifetime of the `WidgetEventQueuer`.
     pub fn new(owner: *mut dyn Widget<C>) -> Self {
         WidgetEventQueuer {
             owner,
@@ -83,7 +116,6 @@ impl<C> Widget<C> for WidgetEventQueuer<C> {
         unsafe {  (*self.owner).set_parent_index(index);  }
     }
 }
-
 
 /// Core trait defining the interface for all UI widgets in the scene graph.
 /// Provides methods for event handling, rendering, and managing parent-child relationships.
@@ -172,7 +204,10 @@ impl <C, T: ?Sized + Widget<C>> PositionReservedVector<C, T> {
         }
     }
 
-    pub fn as_mut_widget_ptr(&mut self, index: usize) {
+    /// Sets the internal event queuer to point to the widget at the given index.
+    /// If the index is invalid or the position is reserved, clears the event queuer.
+    /// This allows safe mutable access to the widget for event handling.
+    pub fn set_mut_widget_ptr(&mut self, index: usize) {
         if index >= self.vector.len() {
             return;
         }
@@ -187,6 +222,8 @@ impl <C, T: ?Sized + Widget<C>> PositionReservedVector<C, T> {
         }
     }
 
+    /// Takes ownership of the item at the given index, replacing it with `None`.
+    /// Acts similar to using `Option::take()`.
     pub fn take(&mut self, index: usize) -> Option<Box<T>> {
         if index >= self.vector.len() {
             return None;
@@ -204,6 +241,7 @@ impl <C, T: ?Sized + Widget<C>> PositionReservedVector<C, T> {
         widget
     }
 
+    /// Replaces the item at the given index with a new item or `None` (undoes the `take` call).
     pub fn replace(&mut self, index: usize, item: Option<Box<T>>) {
         self.taken = None;
         self.event_queuer = None;
@@ -415,7 +453,7 @@ impl<C> Scene<C> {
         for i in 0..self.widgets.len() {  // the if let skips reserved indices
             if self.widgets.index(i).is_none() {  continue;  }
             
-            self.widgets.as_mut_widget_ptr(i);
+            self.widgets.set_mut_widget_ptr(i);
             let mut widget = match self.widgets.event_queuer.take() {
                 None => return Err(WidgetErr::new("Failed to gather the event queuer")),
                 Some(ptr) => ptr,
