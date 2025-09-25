@@ -95,11 +95,13 @@ The `App` instance optionally can have a `Scene`, which is a container for widge
 TermRender provides a flexible widget system:
 
 ## Built-in Widgets
-* StaticWidget: Basic widget with custom rendering logic.
-* DynamicWidget: An interactable widget. In the future, more advanced versions will be implimented which will default as buttons or other such higher-level widgets.
+* StaticWidget: Basic widget with custom rendering logic
+* DynamicWidget: An interactable widget. In the future, more advanced versions will be implemented which will default as buttons or other such higher-level widgets.
+* ButtonWidget: A simple button with automatic click handling.
+* More coming soon!
 
 * Creating Custom Widgets
-Implement the Widget trait to create custom components:
+  Implement the Widget trait to create custom components:
 
 ```
 use term_render::{Widget, SendSync, event_handler::KeyParser};
@@ -109,7 +111,7 @@ struct MyCustomWidget<C> {
     // Your widget state
 }
 
-impl<C> Widget<C> for MyCustomWidget<c> {
+impl<C> Widget<C> for MyCustomWidget<C> {
     fn get_window_ref(&self) -> String {
         "my_custom_widget".to_string()  // note: each widget instance requires a unique identifyer
     }
@@ -140,7 +142,7 @@ TermRender includes several optimizations:
 Check out the examples directory for complete implementations (more coming soon):
 
 - Run basic example
-cargo run --example basic
+  cargo run --example basic
 
 # Documentation
 Full API documentation is available:

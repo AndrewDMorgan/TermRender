@@ -16,6 +16,9 @@ pub mod widget;
 /// This module provides ready-to-use widget implementations and builders for common UI components.
 /// It simplifies the process of creating and configuring widgets by providing default behaviors and properties.
 pub mod widget_impls;
+mod widget_button;
+mod widget_dynamic;
+mod widget_static;
 
 use crate::event_handler::KeyModifiers;
 pub use term_render_macros::*;  // re-exporting the macros for easier use
@@ -104,7 +107,7 @@ impl<C> App<C> {
     /// The callback function should return a `Result<bool, T>`, where the bool indicates whether to
     /// exit the application, and T is the error type.
     /// If the callback function returns an error, the application will exit and propagate the error.
-    /// The application will also exit if Ctrl+C is detected (a fail safe to ensure the application can be stopped).
+    /// The application will also exit if Ctrl+C is detected (a fail-safe to ensure the application can be stopped).
     /// # Parameters
     /// - data: The application data to be passed to the callback function.
     /// - update_call_back: The callback function to be called every frame.
@@ -170,8 +173,8 @@ impl<C> App<C> {
         }
 
         if error {
-            // panicing since the user type isn't known at compile time and can't be easily returned internally
-            // panicing is necessary to ensure the app during drop doesn't clear the screen
+            // panicking since the user type isn't known at compile time and can't be easily returned internally
+            // panicking is necessary to ensure the app during drop doesn't clear the screen
             panic!("An error occurred during execution, see above for details.");
         }
 
@@ -179,7 +182,7 @@ impl<C> App<C> {
             match sender.send(()) {
                 Ok(_) => {},
                 Err(e) => {
-                    // Same reason for panicing as above
+                    // Same reason for panicking as above
                     panic!("Unable to call channel sender: {:?}", e);
                 }
             }

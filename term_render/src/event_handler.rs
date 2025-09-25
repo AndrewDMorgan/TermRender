@@ -316,7 +316,7 @@ impl KeyParser {
     /// and Control modifiers with various keys.
     /// Look at the repository: https://github.com/AndrewDMorgan/TermEdit for a list of supported codes.
     /// 
-    /// *Any custom keys need manual implimentation; certain terminals like iTerm offer support to do so.
+    /// *Any custom keys need manual implementation; certain terminals like iTerm offer support to do so.
     /// This likely won't ever be used by the user, and is most an artifact of the use of this backend in TermEdit (the
     /// listed repository)*
     fn handle_custom_escape_codes (&mut self, numbers: &[u16]) {
@@ -527,7 +527,7 @@ impl KeyParser {
 
 impl Perform for KeyParser {
     /// Handles a printable character input.
-    /// If the character is part of an escape sequence or multi-byte input, it may be ignored.
+    /// If the character is part of an escape sequence or multibyte input, it may be ignored.
     /// Special handling is included for the backspace character (0x7F) and non-graphical characters.
     /// Otherwise, the character is added to the list of character events.
     #[inline(always)]

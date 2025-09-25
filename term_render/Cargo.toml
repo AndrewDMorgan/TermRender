@@ -1,6 +1,6 @@
 [package]
 name = "term_render"
-version = "0.1.2"
+version = "0.1.3-alpha.1"
 edition = "2024"
 keywords = ["tui", "terminal", "ui", "widgets"]
 authors = ["Andrew"]
