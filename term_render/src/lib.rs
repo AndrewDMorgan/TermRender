@@ -19,6 +19,7 @@ pub mod widget_impls;
 
 use crate::event_handler::KeyModifiers;
 pub use term_render_macros::*;  // re-exporting the macros for easier use
+pub use render::Colorize;  // making sure the colorize trait is included
 
 // writing this out gets really verbose really quickly
 
@@ -147,25 +148,43 @@ impl<C> App<C> {
         }
         
         //println!("Checking for errors");
+        let mut error = false;
         *self.exit.write() = true;  // signal the tasks to exit
         match events_handle.await {
             Ok(_) => {},
             Err(e) => {
                 println!("Error in event handling task: {:?}", e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                error = true;
             },
         }
         match render_handle.await {
             Ok(Err(e)) => {
                 println!("App Error in rendering task: {:?}", e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                error = true;
             },
             Ok(_) => {},
             Err(e) => {
                 println!("Error in rendering task: {:?}", e);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                error = true;
             },
         }
+
+        if error {
+            // panicing since the user type isn't known at compile time and can't be easily returned internally
+            // panicing is necessary to ensure the app during drop doesn't clear the screen
+            panic!("An error occurred during execution, see above for details.");
+        }
+
+        if let Some(sender) = self.renderer.write().concluded_sender.take() {
+            match sender.send(()) {
+                Ok(_) => {},
+                Err(e) => {
+                    // Same reason for panicing as above
+                    panic!("Unable to call channel sender: {:?}", e);
+                }
+            }
+        }
+
         Ok(())
     }
     
@@ -205,9 +224,9 @@ impl<C> App<C> {
             }
             
             // updating the scene
-            if let Some(scene) = &mut self.scene {
+            if let Some(mut scene) = self.scene.take() {
                 // updating all widgets' states based on the events and their rendered windows
-                match scene.update_all_widgets(&self.events, &mut *self.renderer.write(), &self.area.read(), &mut data) {
+                match scene.update_all_widgets(self, &mut data) {
                     Err(e) => {
                         *self.exit.write() = true;  // signal the tasks to exit
                         return Err(AppErr::new(&format!("Failed to update widgets in scene: {:?}", e)));
@@ -218,6 +237,7 @@ impl<C> App<C> {
                 if *terminal_size_change.read() {
                     scene.force_update_all_widgets(&mut *self.renderer.write());
                 }
+                self.scene = Some(scene);
             }
             
             self.events.write().clear_events();
@@ -277,7 +297,7 @@ impl<C> App<C> {
     }
     
     /// Handles rendering for a single frame.
-    async fn render_handling(renderer: SendSync<render::App>, area: SendSync<render::Rect>, terminal_size_change: &SendSync<bool>) -> Result<(), AppErr> {
+    async fn render_handling(renderer: &SendSync<render::App>, area: &SendSync<render::Rect>, terminal_size_change: &SendSync<bool>) -> Result<(), AppErr> {
         let ar = match renderer.read().get_terminal_size() {
             Err(e) => {
                 return Err(AppErr::new(&format!("Failed to get terminal size: {:?}", e)));
@@ -307,9 +327,7 @@ impl<C> App<C> {
         let exit_clone = exit.clone();
         let result_handle: tokio::task::JoinHandle<Result<(), AppErr>> = tokio::spawn(async move {
             loop {
-                let renderer = renderer.clone();
-                let area = area.clone();
-                Self::render_handling(renderer.0, area, &terminal_size_change).await?;
+                Self::render_handling(&renderer.0, &area, &terminal_size_change).await?;
                 if *exit_clone.read() {  break;  }
                 match renderer.1.recv() {
                     // the if is necessary to prevent errors whenever exiting (this would wait for a non-existent signal)

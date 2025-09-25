@@ -1,3 +1,37 @@
+//! Event handling utilities for terminal input parsing.
+//!
+//! This module provides the `KeyParser` struct and related enums for parsing and tracking
+//! keyboard and mouse events from terminal input, including support for escape codes,
+//! mouse scrolling, and key modifiers.
+//!
+//! # Enums
+//! - `KeyModifiers`: Represents keyboard modifier keys (Shift, Command, Option, Control).
+//! - `KeyCode`: Represents supported key codes (Delete, Tab, Arrow keys, Return, Escape).
+//! - `MouseEventType`: Represents mouse event types (Null, Left, Right, Middle, Down, Up).
+//! - `MouseState`: Represents mouse button states (Release, Press, Hold, Null).
+//!
+//! # Structs
+//! - `MouseEvent`: Stores mouse event type, position, and state.
+//! - `KeyParser`: Tracks key events, modifiers, mouse events, and scroll events.
+//!
+//! # Features
+//! - Parsing of standard and custom escape codes for keyboard and mouse.
+//! - Mouse scroll event accumulation and averaging.
+//! - Modifier key tracking for both keyboard and mouse events.
+//! - Utility functions to enable/disable mouse capture in the terminal.
+//!
+//! # Usage
+//! Implement the `Perform` trait for `KeyParser` to handle terminal input bytes and escape codes.
+//! Use `KeyParser` methods to query for specific key, character, or modifier events.
+//!
+//! # Example
+//! ```rust
+//! let mut parser = KeyParser::new();
+//! // Feed input bytes to parser via vte::Parser
+//! // Query events:
+//! if parser.contains_key_code(KeyCode::Return) { /* ... */ }
+//! if parser.contains_modifier(KeyModifiers::Shift) { /* ... */ }
+//! ```
 #![allow(dead_code)]
 
 use std::io::Write;
@@ -7,6 +41,8 @@ use vte::Perform;
 const SCROLL_SENSITIVITY: f64 = 0.05;
 const SCROLL_LOG_TIME: f64 = 0.75;
 
+/// A representation of keyboard modifier keys.
+/// Used to track the state of modifier keys during key events.
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Default)]
 pub enum KeyModifiers {
@@ -16,6 +52,8 @@ pub enum KeyModifiers {
     Control,
 }
 
+/// A set of special keycodes that aren't typical characters.
+/// Used to identify specific key events in terminal input.
 #[repr(u8)]
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum KeyCode {
@@ -29,6 +67,7 @@ pub enum KeyCode {
     Escape,
 }
 
+/// Different types of mouse events that can be detected.
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Default)]
 pub enum MouseEventType {
@@ -40,6 +79,7 @@ pub enum MouseEventType {
     Up,
 }
 
+/// Different states of mouse buttons during events.
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Default)]
 pub enum MouseState {
@@ -49,6 +89,7 @@ pub enum MouseState {
     #[default] Null,
 }
 
+/// A structure representing a mouse event, including its type, position, and state.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct MouseEvent {
     pub event_type: MouseEventType,
@@ -56,6 +97,9 @@ pub struct MouseEvent {
     pub state: MouseState,
 }
 
+/// A parser for terminal input that tracks key events, modifiers, mouse events, and scroll events.
+/// Implements the `vte::Perform` trait to handle input bytes and escape codes.
+/// This is used internally within the lib.rs App, and as such rarely needs to be used directly.
 #[derive(Default)]
 pub struct KeyParser {
     pub key_modifiers: Vec <KeyModifiers>,
@@ -71,6 +115,7 @@ pub struct KeyParser {
 }
 
 impl KeyParser {
+    /// Creates a new `KeyParser` instance with default values.
     pub fn new () -> Self {
         KeyParser {
             key_events: std::collections::HashMap::from([
@@ -96,6 +141,8 @@ impl KeyParser {
     }
 
     // tracking a log of scroll events to average them out over a duration of time
+    /// Handles a scroll event by accumulating its direction and updating the average scroll value.
+    /// This method records the time and direction of the scroll event, then calls `update_scroll
     fn scroll (&mut self, sign: i8) {
         let time = std::time::SystemTime::now();
         if self.scroll_accumulate.is_sign_negative() != sign.is_negative(){
@@ -105,6 +152,9 @@ impl KeyParser {
         self.update_scroll();
     }
 
+    /// Updates the average scroll value based on recent scroll events within a defined time window.
+    /// This method filters out old scroll events and calculates the average scroll direction,
+    /// applying sensitivity and time scaling to smooth out the scroll input.
     fn update_scroll(&mut self) {
         let time = std::time::SystemTime::now();
         let mut valid = vec![];
@@ -121,6 +171,13 @@ impl KeyParser {
         self.scroll_events = valid;
     }
 
+    /// Clears all tracked events and resets the parser state.
+    /// This includes character events, key modifiers, mouse modifiers, key events,
+    /// and resets the escape sequence flag. It also updates the scroll state and
+    /// adjusts the mouse event state if necessary.
+    /// *This should be, and only be, called after all key events have been responded to
+    /// (such as after updating each updatable entity). However, this is already called
+    /// internally and shouldn't ever need to be manually called*
     pub fn clear_events (&mut self) {
         self.char_events.clear();
         self.key_modifiers.clear();
@@ -148,22 +205,34 @@ impl KeyParser {
         }
     }
 
+    /// Checks if a specific character event has been recorded.
+    /// Returns `true` if the character is present in the recorded events, otherwise `false
     pub fn contains_char (&self, chr: char) -> bool {
         self.char_events.contains(&chr)
     }
 
+    /// Checks if a specific key modifier is currently active.
+    /// Returns `true` if the modifier is present in the active modifiers, otherwise `false
     pub fn contains_modifier (&self, modifier: KeyModifiers) -> bool {
         self.key_modifiers.contains(&modifier)
     }
 
+    /// Checks if a specific mouse modifier is currently active.
+    /// Returns `true` if the modifier is present in the active mouse modifiers, otherwise `false
     pub fn contains_mouse_modifier (&self, modifier: KeyModifiers) -> bool {
         self.mouse_modifiers.contains(&modifier)
     }
 
+    /// Checks if a specific key code event has been recorded.
+    /// Returns `true` if the key code is present in the recorded events, otherwise `false
     pub fn contains_key_code (&self, key: KeyCode) -> bool {
         *self.key_events.get(&key).unwrap_or(&false)
     }
 
+    /// Handles mouse escape codes by parsing the provided numbers and character.
+    /// This method extracts the button type, position, and modifiers from the escape code,
+    /// then updates the mouse event state accordingly.
+    /// It supports different mouse buttons, scroll events, and modifier keys.
     fn handle_mouse_escape_codes (&mut self, numbers: &[u16], c: char) {
         if let Some([byte, x, y]) = numbers.get(0..3) {
             let button = byte & 0b11; // Mask lowest 2 bits (button type)
@@ -206,6 +275,10 @@ impl KeyParser {
         }
     }
 
+    /// Updates the mouse event state based on the provided event type, position, and character.
+    /// This method adjusts the mouse event position if the event is a drag (hold) event
+    /// and the position has changed. Otherwise, it creates a new mouse event with the given
+    /// parameters.
     fn calculate_mouse_event_code (
         &mut self,
         event_type: MouseEventType,
@@ -236,6 +309,16 @@ impl KeyParser {
         });
     }
 
+    /// Handles custom escape codes by parsing the provided numbers.
+    /// This method maps specific escape code numbers to key events and modifiers,
+    /// updating the key event state accordingly.
+    /// It supports a variety of key combinations, including Command, Option, Shift,
+    /// and Control modifiers with various keys.
+    /// Look at the repository: https://github.com/AndrewDMorgan/TermEdit for a list of supported codes.
+    /// 
+    /// *Any custom keys need manual implimentation; certain terminals like iTerm offer support to do so.
+    /// This likely won't ever be used by the user, and is most an artifact of the use of this backend in TermEdit (the
+    /// listed repository)*
     fn handle_custom_escape_codes (&mut self, numbers: &[u16]) {
         match numbers[1] {
             2 => {
@@ -333,6 +416,10 @@ impl KeyParser {
         }
     }
 
+    /// Handles control + arrow key escape codes by parsing the provided numbers and character.
+    /// This method maps specific escape code characters to key events with the Control modifier,
+    /// updating the key event state accordingly.
+    /// It supports left, right, up, and down arrow keys combined with the Control modifier
     fn handle_control_arrows (&mut self, _numbers: &[u16], c: char) {
         match c {
             'D' => {
@@ -355,6 +442,7 @@ impl KeyParser {
         }
     }
 
+    /// Handles standard escape codes by parsing the provided numbers and character.
     fn handle_standard_escape_codes (&mut self, numbers: &Vec <u16>, c: char) {
         match c as u8 {
             0x5A => {
@@ -411,6 +499,7 @@ impl KeyParser {
 
 }
 
+/// Enables mouse capture in the terminal by sending the appropriate escape codes.
 pub fn enable_mouse_capture() {
     let mut stdout = std::io::stdout();
     let _ = stdout.write_all(b"echo -e \"\x1B[?1006h\"");
@@ -418,6 +507,7 @@ pub fn enable_mouse_capture() {
     let _ = stdout.write_all(b"\x1B[?1003h"); // Enable all motion events
 }
 
+/// Disables mouse capture in the terminal by sending the appropriate escape codes.
 pub fn disable_mouse_capture() {
     let mut stdout = std::io::stdout();
     let _ = stdout.write_all(b"\x1B[?1000l"); // Disable mouse mode
@@ -425,6 +515,8 @@ pub fn disable_mouse_capture() {
 }
 
 impl KeyParser {
+    /// Sets the last key press time to the current system time in milliseconds since the UNIX epoch.
+    /// This is used for tracking the timing of key presses.
     pub fn set_press_time (&mut self) {
         self.last_press = std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
@@ -434,6 +526,11 @@ impl KeyParser {
 }
 
 impl Perform for KeyParser {
+    /// Handles a printable character input.
+    /// If the character is part of an escape sequence or multi-byte input, it may be ignored.
+    /// Special handling is included for the backspace character (0x7F) and non-graphical characters.
+    /// Otherwise, the character is added to the list of character events.
+    #[inline(always)]
     fn print(&mut self, chr: char) {
         //println!("char {}: '{}'", chr as u8, chr);
         if self.in_escape_seq || self.bytes > 1 {
@@ -458,6 +555,10 @@ impl Perform for KeyParser {
         self.char_events.push(chr);
     }
 
+    /// Handles a control character input.
+    /// This method processes specific control characters, including escape sequences
+    /// and common control key combinations (e.g., Ctrl+C, Ctrl+V).
+    /// It updates the key event state and modifier keys accordingly.
     #[inline(always)]
     fn execute(&mut self, byte: u8) {
         self.set_press_time();
@@ -528,6 +629,11 @@ impl Perform for KeyParser {
         //println!("byte {}: '{}'", byte, byte as char);
     }
 
+    /// Handles a CSI (Control Sequence Introducer) escape sequence.
+    /// This method processes the parameters and final character of the escape sequence,
+    /// updating the parser state accordingly. It supports mouse events, custom escape codes,
+    /// control + arrow keys, and standard escape codes.
+    /// The method resets the escape sequence flag and updates the last key press time.
     #[inline(always)]
     fn csi_dispatch(&mut self, params: &vte::Params, _: &[u8], _: bool, c: char) {
         self.in_escape_seq = false;  // resetting the escape sequence

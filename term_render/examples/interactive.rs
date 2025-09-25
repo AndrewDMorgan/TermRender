@@ -1,5 +1,8 @@
 use term_render::{self, event_handler::KeyCode};
+use term_render::render::{Colorize, ColorType};
 use term_render::widget_impls::WidgetBuilder;
+use term_render::render::Span;
+use term_render::color;
 
 // this acts as the callback that is called every frame
 // this is the entry point and any logic needs to branch out from here
@@ -35,19 +38,51 @@ async fn main() -> tokio::io::Result<()> {
     let mut scene = term_render::widget::Scene::new();
     
     let (widget, window) =
-        term_render::widget_impls::StaticWidgetBuilder::<AppData>::builder(String::from("name"))
+        term_render::widget_impls::DynamicWidgetBuilder::<AppData>::builder(String::from("button"))
             .with_border(true)
             .with_renderer(Box::new(|_size, _position| {
-                Some(vec![])
+                Some(vec![Span::from_tokens(vec![color!("I am thing!")])])
             }))
             .with_position((10, 10))
             .with_size((50, 10))
+            // realistically, instead of writing one long closure, the logic could be placed in a function which is called
+            .with_update_handler(Box::new(|widget, _data, app: &mut term_render::App<AppData>, scene| {
+                // checking if the widget was clicked
+                let pressed = if let Some(event) = &app.events.read().mouse_event {
+                    if event.event_type == term_render::event_handler::MouseEventType::Left &&
+                       event.state == term_render::event_handler::MouseState::Press &&
+                       event.position.0 > 10 && event.position.1 > 10 && event.position.0 < 60 && event.position.1 < 20 {
+                        // the button/widget was clicked
+                        true
+                    } else {  false  }
+                } else {  false  };
+                // checking if the widegt contains a child, otherwise creating one (for a pop up)
+                if !pressed {  return  }
+                if widget.get_children_indexes().is_empty() {
+                    // creating a new widget
+                    let (mut widget_child, window) = term_render::widget_impls::StaticWidgetBuilder::<AppData>::builder(String::from("popup"))
+                        .with_border(true)
+                        .with_renderer(Box::new(|_size, _position| {
+                            Some(vec![Span::from_tokens(vec![color!("This is a popup!", Red)])])
+                        }))
+                        .with_position((15, 5))
+                        .with_size((30, 12))
+                        .with_depth(1)
+                        .build(&app.area.read()).unwrap();
+                    widget_child.set_parent_index(scene.get_widget_index(String::from("button")));
+                    // adding the child to the current widget
+                    scene.add_widget(widget_child, window, &mut *app.renderer.write()).unwrap();
+                } else {
+                    // removing the child
+                    scene.remove_widget(scene.get_widget_index(String::from("popup")).unwrap_or(0), &mut *app.renderer.write()).unwrap();
+                }
+            }))
             .build(&app.area.read()).unwrap();
     scene.add_widget(widget, window, &mut *app.renderer.write()).unwrap();
     app.scene = Some(scene);
     
     // running the application with the provided callback function
-    app.run(data, |data, app_instance| {
+    app.run(data, |data, app_instance: &mut term_render::App<AppData>| {
         app_callback(app_instance, data)
     }).await.unwrap();
     
