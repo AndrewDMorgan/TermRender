@@ -16,6 +16,9 @@ pub mod widget;
 /// This module provides ready-to-use widget implementations and builders for common UI components.
 /// It simplifies the process of creating and configuring widgets by providing default behaviors and properties.
 pub mod widget_impls;
+mod widget_button;
+mod widget_dynamic;
+mod widget_static;
 
 use crate::event_handler::KeyModifiers;
 pub use term_render_macros::*;  // re-exporting the macros for easier use
