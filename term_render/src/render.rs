@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-// litterally just for enabling or disabling mouse support and stuff
+// literally just for enabling or disabling mouse support and stuff
 use crate::event_handler;
 use crossbeam;
 
@@ -177,7 +177,7 @@ impl UniqueColor {
     // Converts a static slice into a vector of type String
     /// Converts a static slice of string references into a vector of owned Strings.
     /// This is used internally to standardize the format of modifiers
-    fn into_string_vec (&self, attributes: &'static [&'static str]) -> Vec<String> {
+    fn as_string_vec(&self, attributes: &'static [&'static str]) -> Vec<String> {
         let mut mods = vec![];
         for modifier in attributes {
             mods.push(modifier.to_string())
@@ -193,10 +193,10 @@ impl UniqueColor {
     pub fn unwrap_into_tuple (&self) -> (Option <String>, Vec <String>, bool) {
         match self {
             UniqueColor::Static(s) => {
-                (s.0.map(|t| t.to_owned()), self.into_string_vec(s.1), s.2)
+                (s.0.map(|t| t.to_owned()), self.as_string_vec(s.1), s.2)
             },
             UniqueColor::Dynamic(s) => {
-                (s.0.clone(), self.into_string_vec(s.1), s.2)
+                (s.0.clone(), self.as_string_vec(s.1), s.2)
             },
         }
     }
@@ -359,7 +359,7 @@ impl ColorType {
 
 /// Converts the given instance into the type `Colored` based on a provided
 /// set of modifiers (in the form of `ColorType`).
-/// `colorizes` adds multiple colors or modiferies, while `colorize` adds a single one.
+/// `colorizes` adds multiple colors or modifies, while `colorize` adds a single one.
 /// By default, `Colorize` is implemented for `&str`, `String`, and `Colored`.
 /// Additionally, under the proc_macros, the `color!` macro allows for a simplistic
 /// calling of these functions.
@@ -431,7 +431,7 @@ impl Colorize for Colored {
 }
 
 impl Colored {
-    /// Creates a new Colored isntance with a given text string, and no active modifiers or applied colors.
+    /// Creates a new Colored instance with a given text string, and no active modifiers or applied colors.
     pub fn new (text: String) -> Colored {
         Colored {
             text,
@@ -652,7 +652,7 @@ impl Span {
 
 /// A window is a block or section within the terminal space, similar to a paragraph in Ratatui.
 /// Multiple windows can be rendered at once, and each window can contain its own text or logic.
-/// Each widnow can be moved, resized, hidden, shown, and colored independently.
+/// Each widow can be moved, resized, hidden, shown, and colored independently.
 /// Additionally, each window handles its own rendering logic, caching, and other behaviors.
 #[derive(Clone, Debug, Eq, PartialEq, Default, Hash)]
 pub struct Window {
@@ -671,7 +671,7 @@ pub struct Window {
     pub hidden: bool,
 }
 
-/// A type repsenting a closure that returns a String when called.
+/// A type representing a closure that returns a String when called.
 /// The type is Send so that it can be sent into a background thread for rendering.
 /// The render closures are used to handle the rendering of windows in a background thread.
 type RenderClosure = Vec <(Box <dyn FnOnce () -> String + Send>, u16, u16, u16)>;
@@ -900,7 +900,7 @@ impl Window {
     }
 
     /// Returns a vector of closures which are responsible for returning the stylized and formatted
-    /// text for rendering the window. This closures are cexecuted in a background thread
+    /// text for rendering the window. These closures are executed in a background thread
     /// to allow for non-blocking rendering of the window. This is the newer version of
     /// `get_render_deprecated`, which is mostly deprecated in favor of this function.
     /// This function checks if the window has been updated since the last render.
@@ -1008,7 +1008,7 @@ impl Window {
     /// clamping lines as necessary and adding padding to shorter lines.
     /// The rendered text includes ANSI escape codes for colors and styles.
     /// This is mostly deprecated in favor of using `get_render_closure` for better performance
-    /// and to allow for background rendering in a separate thread. This is no longer internalely used,
+    /// and to allow for background rendering in a separate thread. This is no longer internally used,
     /// so any applications of it would need to be a manual call for a reason beyond the base rendering.
     pub fn get_render_deprecated(&self) -> Vec<String> {
         let mut text = vec![String::new()];

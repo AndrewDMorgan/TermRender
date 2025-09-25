@@ -22,7 +22,7 @@ pub struct DynamicWidgetBuilder<C> {
     /// The custom render function for the widget, if any.
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 
-    update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>>,
+    update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>>,
 
     __phantom: std::marker::PhantomData<C>,
 }
@@ -40,7 +40,7 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
     ///     .build(&Rect::default())  // replace &Rect with the actual terminal size (such as `&app.area.read()`)
     ///     .expect("Invalid widget position or size.");
     /// ```
-    fn build(self, display_area: &crate::render::Rect) -> Result<(Box<dyn Widget<C>>, crate::render::Window), WidgetBuilderError> {
+    fn build(mut self, display_area: &crate::render::Rect) -> Result<(Box<dyn Widget<C>>, crate::render::Window), WidgetBuilderError> {
         let (position, size) = self.size_and_position.get_size_and_position(display_area);
         if size.0 == 0 || size.1 == 0 || position.0 == 0 || position.1 == 0 {
             return Err(WidgetBuilderError { details: String::from("Position and/or size cannot be zero when building a new widget or window.") })
@@ -163,8 +163,8 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
     /// Sets the widget's update handler closure. This closure is called during event updates.
     /// The closure receives references to the widget itself, the event parser, and mutable application data.
     /// By default, there is no update handler, meaning the widget won't respond to events.
-    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>;
-    fn with_update_handler(mut self, handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>) -> Self {
+    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>;
+    fn with_update_handler(mut self, handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>) -> Self {
         self.update_handler = Some(handler);
         self
     }
@@ -200,7 +200,7 @@ pub struct DynamicWidget<C> {
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
 
     /// Optional closure that handles updates to the widget's state.
-    pub update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut crate::widget::Scene<C>)>>,
+    pub update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>>,
 
     __phantom: std::marker::PhantomData<C>,
 }
@@ -219,7 +219,7 @@ impl<C> DynamicWidget<C> {
     /// *When possible, an implementation of `WidgetBuilder` should be used instead, both for safety,
     /// simplicity, and consistency.*
     pub fn new(name: String,
-               size_and_position: SizeAndPosition,
+               mut size_and_position: SizeAndPosition,
                render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
                depth: u16,
                display_area: &crate::render::Rect,
@@ -255,7 +255,7 @@ impl<C> Widget<C> for DynamicWidget<C> {
     /// Handles event updates by invoking the user-provided update handler closure, if any.
     /// The closure receives references to the widget itself, the event parser, and mutable application data.
     /// If no update handler is set, this method performs no action.
-    fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut crate::widget::Scene<C>) {
+    fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut Scene<C>) {
         if let Some(update_handler) = self.update_handler.take() {
             update_handler(self, data, app, scene);
             self.update_handler = Some(update_handler);
@@ -306,6 +306,12 @@ impl<C> Widget<C> for DynamicWidget<C> {
     /// Sets the parent widget index for this widget, or None for a root node.
     fn set_parent_index(&mut self, index: Option<usize>) {
         self.parent_index = index;
+    }
+    
+    /// Determines if a given position collides with the widget's area.
+    fn is_collided(&self, position: (u16, u16)) -> bool {
+        let (size, pos) = self.size_and_position.get_last();
+        position.0 >= pos.0 && position.0 < pos.0 + size.0 && position.1 >= pos.1 && position.1 < pos.1 + size.1
     }
 }
 
