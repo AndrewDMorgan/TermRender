@@ -1,6 +1,6 @@
 use term_render::{self, event_handler::KeyCode};
+use term_render::render::{Colorize, ColorType};
 use term_render::widget_impls::WidgetBuilder;
-use term_render::render::{Colorize};
 use term_render::render::Span;
 use term_render::color;
 
@@ -46,7 +46,7 @@ async fn main() -> tokio::io::Result<()> {
             .with_position((10, 10))
             .with_size((50, 10))
             // realistically, instead of writing one long closure, the logic could be placed in a function which is called
-            .with_update_handler(Box::new(|widget, _data, app, scene| {
+            .with_update_handler(Box::new(|widget, _data, app: &mut term_render::App<AppData>, scene| {
                 // checking if the widget was clicked
                 let pressed = if let Some(event) = &app.events.read().mouse_event {
                     if event.event_type == term_render::event_handler::MouseEventType::Left &&
@@ -63,7 +63,7 @@ async fn main() -> tokio::io::Result<()> {
                     let (mut widget_child, window) = term_render::widget_impls::StaticWidgetBuilder::<AppData>::builder(String::from("popup"))
                         .with_border(true)
                         .with_renderer(Box::new(|_size, _position| {
-                            Some(vec![Span::from_tokens(vec![color!("This is a popup!")])])
+                            Some(vec![Span::from_tokens(vec![color!("This is a popup!", Red)])])
                         }))
                         .with_position((15, 5))
                         .with_size((30, 12))
