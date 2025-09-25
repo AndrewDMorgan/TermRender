@@ -21,7 +21,7 @@ Add TermRender to your Cargo.toml:
 ```
 toml
 [dependencies]
-term_render = "0.1.1"
+term_render = "0.1.2"
 tokio = { version = "1.47.1", features = ["full"] }
 ```
 
@@ -96,6 +96,7 @@ TermRender provides a flexible widget system:
 
 ## Built-in Widgets
 * StaticWidget: Basic widget with custom rendering logic
+* DynamicWidget: An interactable widget. In the future, more advanced versions will be implimented which will default as buttons or other such higher-level widgets.
 
 * Creating Custom Widgets
 Implement the Widget trait to create custom components:
