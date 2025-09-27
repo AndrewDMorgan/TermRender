@@ -1,6 +1,9 @@
 #![allow(dead_code, unused_imports)]
 
+// Making all of them publicly accessible from this module to prevent importing 20 modules and preventing me from writing it all in one file
+pub use crate::widget_static_text::*;
 pub use crate::widget_dynamic::*;
+pub use crate::widget_typing::*;
 pub use crate::widget_static::*;
 pub use crate::widget_button::*;
 use crate::widget::*;
@@ -28,17 +31,24 @@ pub trait WidgetBuilder<C> {
     fn with_title(self, title: String) -> Self;
     /// Sets the widget's depth (z-index)
     fn with_depth(self, depth: u16) -> Self;
+    /// The type representing the renderer closure.
+    type RendererType;
     /// Sets the widget's custom renderer closure
-    fn with_renderer(self, renderer: Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>) -> Self;
+    fn with_renderer(self, renderer: Self::RendererType) -> Self;
     /// Creates a new builder instance with the provided unique name identifier.
     /// It's recommended that the identifying name is as inputted, and not
     /// modified, to avoid conflicts if the user manually attempts to access the widget.
     fn builder(name: String) -> Self;
     /// Sets the widget's SizeAndPosition configuration directly.
     fn with_sap(self, sap: SizeAndPosition) -> Self;
-    /// Sets the widget's update handler closure. This closure is called during event updates.
+    /// The type for the update handler closure.
     type FunctionType;
+    /// Sets the widget's update handler closure. This closure is called during event updates.
     fn with_update_handler(self, _handler: Self::FunctionType) -> Self;
+    /// Sets the widget's parent by its index in the scene, or `None` for no parent (root level).
+    fn with_parent(self, parent: Option<usize>) -> Self;
+    /// Builds and adds the widget to the scene, removing the boilerplate of calling `build` and then adding it to the scene.
+    fn add_to_scene(self, app: &mut crate::App<C>, scene: &mut Scene<C>) -> Result<usize, WidgetErr>;
 }
 
 /// Represents a widget's size and position configuration, supporting both static and dynamic layouts.

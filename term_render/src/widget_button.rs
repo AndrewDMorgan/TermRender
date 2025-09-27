@@ -34,14 +34,16 @@ pub struct ButtonWidgetBuilder<C> {
     /// The size and position configuration for the widget.
     pub size_and_position: SizeAndPosition,
     /// The custom render function for the widget, if any.
-    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
+    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>>,
 
     /// Optional update handler closure for the button widget.
     /// This closure is called during event updates and receives references to the widget,
     /// application data, the app instance, the scene, and the current button state.
     /// By default, there is no update handler, meaning the widget won't respond to events.
     update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>, &ButtonState)>>,
-
+    /// The index of the parent widget in the scene graph, if any.
+    parent: Option<usize>,
+    
     __phantom: std::marker::PhantomData<C>,
 }
 
@@ -70,7 +72,7 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
         Ok((Box::new(ButtonWidget::<C> {
             children: vec![],
             name: self.name,
-            parent_index: None,
+            parent_index: self.parent,
             size_and_position: self.size_and_position,
             render_function: self.render_function,
             update_handler: self.update_handler,
@@ -128,18 +130,20 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
         self
     }
     
+    /// The type representing the renderer closure.
+    type RendererType = Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>;
     /// Sets the rendering closure that generates content for the widget.
     /// The closure receives size and position parameters and returns an optional vector of type `Span`.
     /// By default, there is no renderer, leaving the widget empty (apart from stylization like a border or title).
     /// The closure is a boxed closure that takes in `(size: (u16, u16), position: (u16, u16))`. This closure
     /// can capture local context to allow for easier dynamic variations between widgets with minimal boilerplate.
-    /// #Example:
+    /// # Example:
     /// ```
     /// use term_render::widget_impls::{ButtonWidgetBuilder, WidgetBuilder};
     /// use term_render::render::Rect;
     ///
     /// // the closure can capture local variables to reduce boilerplate
-    /// let closure = Box::new(move |size, position| {
+    /// let closure = Box::new(move |size, position, button_state| {
     ///     None  // this will leave the widget un-updated
     /// });
     /// let (widget, window) = ButtonWidgetBuilder::<AppData>::builder(String::new())
@@ -147,7 +151,7 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
     ///     .build(&Rect::default())
     ///     .unwrap();
     /// ```
-    fn with_renderer(mut self, renderer: Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>) -> Self {
+    fn with_renderer(mut self, renderer: Self::RendererType) -> Self {
         self.render_function = Some(renderer);
         self
     }
@@ -169,6 +173,7 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
             border: false,
             title: None,
             update_handler: None,
+            parent: None,
             __phantom: std::marker::PhantomData,
         }
     }
@@ -187,6 +192,36 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
         self.update_handler = Some(handler);
         self
     }
+    
+    /// Sets the parent widget index for this widget, if any.
+    /// By default, the parent is None, indicating a root node.
+    fn with_parent(mut self, parent: Option<usize>) -> Self {
+        self.parent = parent;
+        self
+    }
+    
+    /// Builds the widget and adds it to the provided scene, returning the new widget's index in the scene graph.
+    /// This method combines the `build` and `scene.add_widget` calls into one for convenience.
+    /// If building the widget fails, an error is returned instead.
+    /// # Example:
+    /// ```
+    /// use term_render::widget_impls::{ButtonWidgetBuilder, WidgetBuilder};
+    /// use term_render::render::Rect;
+    /// let mut app = term_render::App::new().unwrap();
+    /// let mut scene = term_render::widget::Scene::new();
+    /// let widget_index = ButtonWidgetBuilder::<AppData>::builder(String::from("My Widget"))
+    ///     .with_position((5, 5))
+    ///     .with_size((20, 10))
+    ///     .add_to_scene(&mut app, &mut scene)
+    ///     .expect("Failed to build and add widget to scene.");
+    /// ```
+    fn add_to_scene(self, app: &mut crate::App<C>, scene: &mut Scene<C>) -> Result<usize, WidgetErr> {
+        if let Ok((widget, window)) = self.build(&app.area.read()) {
+            scene.add_widget(widget, window, &mut *app.renderer.write())
+        } else {
+            Err(WidgetErr::new("Failed to build and add widget to scene."))
+        }
+    }
 }
 
 /// Represents a button widget that can respond to user interactions such as clicks and hovers.
@@ -201,7 +236,7 @@ pub struct ButtonWidget<C> {
     name: String,
 
     /// The index of the parent widget in the scene graph, if any (None would
-    /// indicate the root node, which there can only be one of).
+    /// indicate the root node).
     parent_index: Option<usize>,
     
     // this should be an easy, lightweight, and changeable way to get the size and position
@@ -213,7 +248,7 @@ pub struct ButtonWidget<C> {
     // takes the size and position in, and returns the vector of spans to render
     // this is a function object, allowing for capturing of state if desired
     /// Optional closure that generates the widget's rendered content based on size and position.
-    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
+    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>>,
 
     /// Optional closure that handles updates to the widget's state.
     pub update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>, &ButtonState)>>,
@@ -240,7 +275,7 @@ impl<C> ButtonWidget<C> {
     /// simplicity, and consistency.*
     pub fn new(name: String,
                mut size_and_position: SizeAndPosition,
-               render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
+               render_function: Option<Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>>,
                depth: u16,
                display_area: &crate::render::Rect,
     ) -> Result<(ButtonWidget<C>, crate::render::Window), WidgetErr> {
@@ -286,7 +321,9 @@ impl<C> Widget<C> for ButtonWidget<C> {
     /// - Released: When the button is released (mouse up) after being pressed.
     /// 
     /// The state transitions are managed internally based on mouse events. The entire
-    /// widget as a whole represents the button's 'hit box'.
+    /// widget as a whole represents the button's 'hit box'. The button **will** check
+    /// for concealing widgets above it, and **cannot** be modified such as to only do so
+    /// in certain circumstances.
     fn update_with_events(&mut self, data: &mut C, app: &mut crate::App<C>, scene: &mut Scene<C>) {
         // updating the button's state based on mouse events
         let (size, position) = self.size_and_position.get_size_and_position(&app.area.read());
@@ -297,6 +334,8 @@ impl<C> Widget<C> for ButtonWidget<C> {
                     if event.position.0 > position.0 && event.position.0 < position.0 + size.0 &&
                        event.position.1 > position.1 && event.position.1 < position.1 + size.1 {
                         // mouse is over the button
+                        if scene.is_click_blocked(scene.get_widget_index(self.get_window_ref()).unwrap_or(0), event.position)
+                            .unwrap_or(false) {  return;  }
                         if event.event_type == crate::event_handler::MouseEventType::Left &&
                            event.state == crate::event_handler::MouseState::Press {
                             // the button was clicked
@@ -344,6 +383,12 @@ impl<C> Widget<C> for ButtonWidget<C> {
                     if event.position.0 > position.0 && event.position.0 < position.0 + size.0 &&
                        event.position.1 > position.1 && event.position.1 < position.1 + size.1 {
                         // mouse is over the button
+                        if scene.is_click_blocked(scene.get_widget_index(self.get_window_ref()).unwrap_or(0), event.position)
+                            .unwrap_or(false) {
+                            self.button_state = std::rc::Rc::new(ButtonState::Normal);
+                            return;
+                        }
+                        
                         if event.event_type == crate::event_handler::MouseEventType::Left &&
                            event.state == crate::event_handler::MouseState::Press {
                             // the button was clicked
@@ -374,7 +419,7 @@ impl<C> Widget<C> for ButtonWidget<C> {
         window.resize(size);
         window.r#move(position);
         if let Some(render_function) = &self.render_function {
-            if let Some(render) = render_function(size, position) {
+            if let Some(render) = render_function(size, position, &self.button_state) {
                 return window.try_update_lines(render);
             }
         } false

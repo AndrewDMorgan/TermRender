@@ -325,8 +325,6 @@ impl <C, T: ?Sized + Widget<C>> PositionReservedVector<C, T> {
 pub struct Scene<C> {
     /// All widgets in the scene
     widgets: PositionReservedVector<C, dyn Widget<C>>,
-    /// The hierarchy of widgets (parent-child relationships)
-    root_index: Option<usize>,
 }
 
 impl<C> Scene<C> {
@@ -340,7 +338,6 @@ impl<C> Scene<C> {
                 event_queuer: None,
                 _phantom: std::marker::PhantomData,
             },
-            root_index: None,
         }
     }
 
@@ -389,19 +386,16 @@ impl<C> Scene<C> {
                 Some(parent_widget) => parent_widget.add_child_index(index),
                 None => return Err(WidgetErr::new("Invalid widget index - 2")),
             }
-            
-            /*match self.widgets.index_mut(index) {
-                Some(child_widget) => child_widget.set_parent_index(Some(*parent_index)),
-                None => return Err(WidgetErr::new("Invalid widget index - 3")),
-            }*/  // isn't it litterally already set above??
-        } else {
-            if self.root_index.is_some() {
-                return Err(WidgetErr::new("Only one root widget allowed"));
-            }
-            self.root_index = Some(index);
         }
         
         Ok(index)
+    }
+    
+    /// A wrapper around `remove_widget` that takes a widget reference name instead of an index.
+    /// This is to reduce the boilerplate of getting the index first often through a chain of functions.
+    pub fn remove_widget_ref(&mut self, r#ref: String, app: &mut term_render::App) -> Result<(), WidgetErr> {
+        let index = self.get_widget_index(r#ref).ok_or(WidgetErr::new("Widget not found"))?;
+        self.remove_widget(index, app)
     }
     
     /// Removes a widget and all its children recursively.
@@ -433,9 +427,6 @@ impl<C> Scene<C> {
             };
             let child_index_location = parent_widget.get_children_indexes().iter().position(|&i| i == index).ok_or(WidgetErr::new("Child index not found in parent"))?;
             parent_widget.remove_child_index(child_index_location);
-        } else {
-            // if it's the root, clear the root index
-            self.root_index = None;
         }
         
         // remove all children recursively
@@ -564,6 +555,27 @@ impl<C> Scene<C> {
             app.get_window_reference_mut(widget.get_window_ref()).update_all();
             self.update_parents(parent_index, app)?;
         } Ok(())
+    }
+    
+    /// Checks if a click at the given position is blocked by any other widgets in the scene.
+    /// Returns `Some(true)` if blocked, `Some(false)` if not blocked, or `None` if the index is invalid.
+    /// This is useful for determining if a click event should be processed by the widget or ignored due to overlap.
+    /// This is different from `is_click_blocked` which only checks child widgets.
+    pub fn is_click_blocked_all(&self, index: usize, position: (u16, u16), app: &App<C>) -> Option<bool> {
+        let base_depth = app.renderer.read().get_window_reference(match self.widgets.index(index) {
+            Some(w) => w,
+            None => return None,
+        }.get_window_ref()).depth;
+        for i in 0..self.widgets.len() {
+            if i == index {  continue;  }
+            if let Some(widget) = self.widgets.index(i) {
+                if widget.is_collided(position) &&
+                    base_depth < app.renderer.read().get_window_reference(widget.get_window_ref()).depth
+                {
+                    return Some(true)
+                }
+            }
+        } Some(false)  // None means bad index, false means it's not blocked
     }
     
     /// Checks if a click at the given position is blocked by any child widgets of the widget at the given index.

@@ -1259,6 +1259,9 @@ impl App {
         event_handler::enable_mouse_capture();
         crossterm::terminal::enable_raw_mode()?;
         
+        print!("\x1B[0m");
+        print!("\x1B[2K\x1B[E");
+        
         print!("\x1B7");
         print!("\x1B[?1049h");
         print!("\x1B[?25l");
@@ -1442,7 +1445,7 @@ impl App {
                 if window.0.hidden {  continue;  }  // hidden windows don't need re-rendering
                 window.0.update_all();
             }
-
+            
             // replace with an actual clear..... this doesn't work (it just shifts the screen--or does it???)
             print!("\x1b[2J\x1b[H");  // re-clearing the screen (everything will need to update)
         }

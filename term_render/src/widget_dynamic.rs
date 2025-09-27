@@ -21,8 +21,12 @@ pub struct DynamicWidgetBuilder<C> {
     pub size_and_position: SizeAndPosition,
     /// The custom render function for the widget, if any.
     pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
-
+    /// The update handler function for the widget, if any. This function is called during event updates.
+    /// The closure receives references to the widget itself, the event parser, and mutable application data.
+    /// In responce, the closure can react to events and modify the widget's state as needed.
     update_handler: Option<Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>>,
+    /// The index of the parent widget in the scene graph, if any.
+    parent: Option<usize>,
 
     __phantom: std::marker::PhantomData<C>,
 }
@@ -52,7 +56,7 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
         Ok((Box::new(DynamicWidget::<C> {
             children: vec![],
             name: self.name,
-            parent_index: None,
+            parent_index: self.parent,
             size_and_position: self.size_and_position,
             render_function: self.render_function,
             update_handler: self.update_handler,
@@ -109,6 +113,8 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
         self
     }
     
+    /// The type representing the renderer closure.
+    type RendererType = Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>;
     /// Sets the rendering closure that generates content for the widget.
     /// The closure receives size and position parameters and returns an optional vector of type `Span`.
     /// By default, there is no renderer, leaving the widget empty (apart from stylization like a border or title).
@@ -128,7 +134,7 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
     ///     .build(&Rect::default())
     ///     .unwrap();
     /// ```
-    fn with_renderer(mut self, renderer: Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>) -> Self {
+    fn with_renderer(mut self, renderer: Self::RendererType) -> Self {
         self.render_function = Some(renderer);
         self
     }
@@ -150,6 +156,7 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
             border: false,
             title: None,
             update_handler: None,
+            parent: None,
             __phantom: std::marker::PhantomData,
         }
     }
@@ -168,6 +175,36 @@ impl<C: 'static> WidgetBuilder<C> for DynamicWidgetBuilder<C> {
         self.update_handler = Some(handler);
         self
     }
+    
+    /// Sets the parent widget index for this widget, if any.
+    /// By default, the parent is None, indicating a root node.
+    fn with_parent(mut self, parent: Option<usize>) -> Self {
+        self.parent = parent;
+        self
+    }
+    
+    /// Builds the widget and adds it to the provided scene, returning the new widget's index in the scene graph.
+    /// This method combines the `build` and `scene.add_widget` calls into one for convenience.
+    /// If building the widget fails, an error is returned instead.
+    /// # Example:
+    /// ```
+    /// use term_render::widget_impls::{DynamicWidgetBuilder, WidgetBuilder};
+    /// use term_render::render::Rect;
+    /// let mut app = term_render::App::new().unwrap();
+    /// let mut scene = term_render::widget::Scene::new();
+    /// let widget_index = DynamicWidgetBuilder::<AppData>::builder(String::from("My Widget"))
+    ///     .with_position((5, 5))
+    ///     .with_size((20, 10))
+    ///     .add_to_scene(&mut app, &mut scene)
+    ///     .expect("Failed to build and add widget to scene.");
+    /// ```
+    fn add_to_scene(self, app: &mut crate::App<C>, scene: &mut Scene<C>) -> Result<usize, WidgetErr> {
+        if let Ok((widget, window)) = self.build(&app.area.read()) {
+            scene.add_widget(widget, window, &mut *app.renderer.write())
+        } else {
+            Err(WidgetErr::new("Failed to build and add widget to scene."))
+        }
+    }
 }
 
 /// A widget that renders dynamic content using a provided closure (i.e.
@@ -185,7 +222,7 @@ pub struct DynamicWidget<C> {
     name: String,
 
     /// The index of the parent widget in the scene graph, if any (None would
-    /// indicate the root node, which there can only be one of).
+    /// indicate the root node).
     parent_index: Option<usize>,
     
     // this should be an easy, lightweight, and changeable way to get the size and position

@@ -1,11 +1,11 @@
 use crate::widget_impls::*;
 use crate::widget::*;
 
-/// Builder for creating StaticWidget instances with a fluent interface.
+/// Builder for creating StaticTextWidget instances with a fluent interface.
 /// Maintains configuration state until build() is called to create the actual widget.
-/// `StaticWidgetBuilder` is an example of an implementation of `WidgetBuilder`, where
+/// `StaticTextWidgetBuilder` is an example of an implementation of `WidgetBuilder`, where
 /// the struct doesn't implement `Widget`.
-pub struct StaticWidgetBuilder<C> {
+pub struct StaticTextWidgetBuilder<C> {
     /// The unique name identifier for the widget.
     name: String,
     /// The z-index depth of the widget; higher values render on top of lower ones.
@@ -17,7 +17,7 @@ pub struct StaticWidgetBuilder<C> {
     /// The size and position configuration for the widget.
     pub size_and_position: SizeAndPosition,
     /// The custom render function for the widget, if any.
-    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
+    pub render_text: Vec<crate::render::Span>,
     /// The index of the parent widget in the scene graph, if any.
     parent: Option<usize>,
     
@@ -25,15 +25,15 @@ pub struct StaticWidgetBuilder<C> {
 }
 
 /// Implementations for the methods in `WidgetBuilder`.
-impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
-    /// Constructs a `StaticWidget`, an implementor of `Widget`, given the parameters.
+impl<C: 'static> WidgetBuilder<C> for StaticTextWidgetBuilder<C> {
+    /// Constructs a `StaticTextWidget`, an implementor of `Widget`, given the parameters.
     /// Validates that size and position are non-zero before creating the widget.
     /// The method takes in a reference to the terminal's current area/size.
     /// # Example:
     /// ```
-    /// use term_render::widget_impls::{StaticWidgetBuilder, WidgetBuilder};
+    /// use term_render::widget_impls::{StaticTextWidgetBuilder, WidgetBuilder};
     /// use term_render::render::Rect;
-    /// let (widget, window) = StaticWidgetBuilder::<AppData>::builder(String::new())
+    /// let (widget, window) = StaticTextWidgetBuilder::<AppData>::builder(String::new())
     ///     .build(&Rect::default())  // replace &Rect with the actual terminal size (such as `&app.area.read()`)
     ///     .expect("Invalid widget position or size.");
     /// ```
@@ -46,12 +46,12 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
         let mut window = crate::render::Window::new(position, *depth, size);
         if self.border {  window.bordered();  }
         if let Some(title) = &self.title {  window.titled(title.clone());  }
-        Ok((Box::new(StaticWidget::<C> {
+        Ok((Box::new(StaticTextWidget::<C> {
             children: vec![],
             name: self.name,
             parent_index: self.parent,
             size_and_position: self.size_and_position,
-            render_function: self.render_function,
+            render_text: self.render_text,
             __phantom: std::marker::PhantomData,
         }), window))
     }
@@ -105,29 +105,33 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
         self
     }
     
-    /// The type representing the renderer closure.
-    type RendererType = Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>;
-    /// Sets the rendering closure that generates content for the widget.
-    /// The closure receives size and position parameters and returns an optional vector of type `Span`.
-    /// By default, there is no renderer, leaving the widget empty (apart from stylization like a border or title).
-    /// The closure is a boxed closure that takes in `(size: (u16, u16), position: (u16, u16))`. This closure
-    /// can capture local context to allow for easier dynamic variations between widgets with minimal boilerplate.
-    /// #Example:
+    /// The type representing the renderer content. This is different from other widgets
+    /// as it is not a closure, but rather the actual content to render.
+    type RendererType = Vec<crate::render::Span>;
+    /// This renderer is unique, as instead of providing a render closure, the user provides
+    /// the actual rendered content directly. This is because static text widgets don't need to
+    /// change their content dynamically, and as such a closure is unnecessary overhead.
+    /// This also means that once the widget sets the text, it will never change. The widget can
+    /// change size and position, but the text will remain constant. If the text is meant to
+    /// be centered, it will not retain that centering so a `StaticWidget` or `DynamicWidget`
+    /// would be more appropriate.
+    /// # Example:
     /// ```
-    /// use term_render::widget_impls::{StaticWidgetBuilder, WidgetBuilder};
-    /// use term_render::render::Rect;
+    /// use term_render::widget_impls::{StaticTextWidgetBuilder, WidgetBuilder};
+    /// use term_render::render::{Rect, Colorize, ColorType};
+    /// use term_render::color;
     ///
-    /// // the closure can capture local variables to reduce boilerplate
-    /// let closure = Box::new(move |size, position| {
-    ///     None  // this will leave the widget un-updated
-    /// });
-    /// let (widget, window) = StaticWidgetBuilder::<AppData>::builder(String::new())
-    ///     .with_renderer(closure)
+    /// let (widget, window) = StaticTextWidgetBuilder::<AppData>::builder(String::new())
+    ///     .with_renderer(vec![
+    ///        term_render::render::Span::from_tokens(vec![
+    ///             color!["Hello World!", Blue, Bold],
+    ///         ])
+    ///     ])
     ///     .build(&Rect::default())
     ///     .unwrap();
     /// ```
     fn with_renderer(mut self, renderer: Self::RendererType) -> Self {
-        self.render_function = Some(renderer);
+        self.render_text = renderer;
         self
     }
     
@@ -136,15 +140,15 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
     /// provide them using the other `WidgetBuilder` trait functions.
     /// # Example:
     /// ```
-    /// use term_render::widget_impls::{StaticWidgetBuilder, WidgetBuilder};
-    /// let builder = StaticWidgetBuilder::<AppData>::builder(String::from("Widget Name"));
+    /// use term_render::widget_impls::{StaticTextWidgetBuilder, WidgetBuilder};
+    /// let builder = StaticTextWidgetBuilder::<AppData>::builder(String::from("Widget Name"));
     /// ```
     fn builder(name: String) -> Self {
         Self {
             name,
             depth: None,
             size_and_position: SizeAndPosition::default(),
-            render_function: None,
+            render_text: vec![],
             border: false,
             title: None,
             parent: None,
@@ -157,7 +161,7 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
         self.size_and_position = sap;
         self
     }
-
+    
     /// Static widgets do not respond to events, so this is a no-op that returns self.
     type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>;
     fn with_update_handler(self, _handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>) -> Self {
@@ -167,6 +171,7 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
     
     /// Sets the parent widget index for this widget, if any.
     /// By default, the parent is None, indicating a root node.
+    /// However, only one root node can exist at a given time in a scene graph.
     fn with_parent(mut self, parent: Option<usize>) -> Self {
         self.parent = parent;
         self
@@ -177,11 +182,11 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
     /// If building the widget fails, an error is returned instead.
     /// # Example:
     /// ```
-    /// use term_render::widget_impls::{StaticWidgetBuilder, WidgetBuilder};
+    /// use term_render::widget_impls::{StaticTextWidgetBuilder, WidgetBuilder};
     /// use term_render::render::Rect;
     /// let mut app = term_render::App::new().unwrap();
     /// let mut scene = term_render::widget::Scene::new();
-    /// let widget_index = StaticWidgetBuilder::<AppData>::builder(String::from("My Widget"))
+    /// let widget_index = StaticTextWidgetBuilder::<AppData>::builder(String::from("My Widget"))
     ///     .with_position((5, 5))
     ///     .with_size((20, 10))
     ///     .add_to_scene(&mut app, &mut scene)
@@ -199,18 +204,18 @@ impl<C: 'static> WidgetBuilder<C> for StaticWidgetBuilder<C> {
 /// A widget that renders static content using a provided closure (i.e.
 /// a title box or description).
 /// Suitable for content that doesn't change frequently or in response to events.
-/// `StaticWidgetBuilder` is the associated builder for creating instances of this widget.
+/// `StaticTextWidgetBuilder` is the associated builder for creating instances of this widget.
 /// The generic parameter C represents the application data type, which can be any type defined by the user.
-pub struct StaticWidget<C> {
+pub struct StaticTextWidget<C> {
     /// The indices of child widgets in the scene graph.
     children: Vec<usize>,
-
+    
     /// The unique name identifier for the widget. The rendering backend
     /// relies on `String` names instead of widgets.
     name: String,
-
+    
     /// The index of the parent widget in the scene graph, if any (None would
-    /// indicate the root node).
+    /// indicate the root node, which there can only be one of).
     parent_index: Option<usize>,
     
     // this should be an easy, lightweight, and changeable way to get the size and position
@@ -222,13 +227,13 @@ pub struct StaticWidget<C> {
     // takes the size and position in, and returns the vector of spans to render
     // this is a function object, allowing for capturing of state if desired
     /// Optional closure that generates the widget's rendered content based on size and position.
-    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
-
+    pub render_text: Vec<crate::render::Span>,
+    
     __phantom: std::marker::PhantomData<C>,
 }
 
-impl<C> StaticWidget<C> {
-    /// Creates a new StaticWidget and its associated window.
+impl<C> StaticTextWidget<C> {
+    /// Creates a new StaticTextWidget and its associated window.
     /// # Arguments
     /// * `name` - Unique identifier for the widget
     /// * `size_and_position` - Configuration for size and positioning
@@ -242,22 +247,22 @@ impl<C> StaticWidget<C> {
     /// simplicity, and consistency.*
     pub fn new(name: String,
                mut size_and_position: SizeAndPosition,
-               render_function: Option<Box<dyn Fn((u16, u16), (u16, u16)) -> Option<Vec<crate::render::Span>>>>,
+               render_text: Vec<crate::render::Span>,
                depth: u16,
                display_area: &crate::render::Rect,
-    ) -> Result<(StaticWidget<C>, crate::render::Window), WidgetErr> {
+    ) -> Result<(StaticTextWidget<C>, crate::render::Window), WidgetErr> {
         let (size, position) = size_and_position.get_size_and_position(display_area);
         if size.0 == 0 || size.1 == 0 || position.0 == 0 || position.1 == 0 {
             return Err(WidgetErr::new("Size or position cannot be zero"))
         }
         let window = crate::render::Window::new(position, depth, size);
         
-        let widget = StaticWidget::<C> {
+        let widget = StaticTextWidget::<C> {
             children: vec![],
             name,
             parent_index: None,
             size_and_position,
-            render_function,
+            render_text,
             __phantom: std::marker::PhantomData,
         };
         
@@ -265,8 +270,8 @@ impl<C> StaticWidget<C> {
     }
 }
 
-/// Implementation of the methods for StaticWidget
-impl<C> Widget<C> for StaticWidget<C> {
+/// Implementation of the methods for StaticTextWidget
+impl<C> Widget<C> for StaticTextWidget<C> {
     /// Returns the widget's name as an identifier. The rendering backend relies
     /// on `String` names instead of widgets.
     fn get_window_ref(&self) -> String {
@@ -288,13 +293,11 @@ impl<C> Widget<C> for StaticWidget<C> {
         let (size, position) = self.size_and_position.get_size_and_position(area);
         window.resize(size);
         window.r#move(position);
-        if let Some(render_function) = &self.render_function {
-            if let Some(render) = render_function(size, position) {
-                return window.try_update_lines(render);
-            }
-        } false
+        if window.is_empty() {  // it'll only be empty if nothing has been assigned; once something is assigned that text is final
+            window.try_update_lines(self.render_text.clone())
+        } else {  false  }
     }
-
+    
     /// Returns the indices of child widgets in the scene graph.
     fn get_children_indexes(&self) -> Vec<usize> {
         self.children.clone()

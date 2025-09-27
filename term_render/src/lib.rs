@@ -19,6 +19,8 @@ pub mod widget_impls;
 mod widget_button;
 mod widget_dynamic;
 mod widget_static;
+mod widget_static_text;
+mod widget_typing;
 
 use crate::event_handler::KeyModifiers;
 pub use term_render_macros::*;  // re-exporting the macros for easier use
@@ -34,6 +36,10 @@ pub use render::Colorize;  // making sure the colorize trait is included
 /// This is also paired with the `send_sync!` macro to simplify the creation of such types.
 pub type SendSync<T> = std::sync::Arc<parking_lot::RwLock<T>>;
 
+/// Represents an internal error within the App struct/workings of lib.rs.
+/// This is used to propagate errors from background tasks (rendering and event handling)
+/// back to the main application loop, allowing for graceful shutdown and error reporting.
+/// This error type is distinct from user-defined errors that may arise from the callback function.
 #[derive(Debug)]
 pub struct AppErr {
     details: String,
@@ -46,6 +52,9 @@ impl std::fmt::Display for AppErr {
 }
 
 impl AppErr {
+    /// Create a new AppErr with the given details.
+    /// The internal details are very limited and as such the creator
+    /// should pre-format the details to be as informative as possible.
     pub fn new(details: &str) -> Self {
         AppErr { details: details.to_string() }
     }
@@ -89,6 +98,7 @@ impl<C> App<C> {
     /// This initializes the renderer and event handler.
     pub fn new() -> std::io::Result<Self> {
         let renderer = send_sync!(render::App::new()?);
+        renderer.write().render(None);
         let events = send_sync!(event_handler::KeyParser::new());
         let (width, height) = renderer.read().get_terminal_size()?;
         
@@ -127,9 +137,17 @@ impl<C> App<C> {
     /// }).await.unwrap();
     /// ```
     pub async fn run<T: Sized + std::fmt::Debug>(&mut self, data: C, update_call_back: fn(&mut C, &mut App<C>) -> Result<bool, T>) -> Result<(), T> {
+        self.renderer.write().render(None);
+        // it seems that adding a back wall seems to fix the initialization rendering bug? Odd, but works
+        // no idea why it's only a problem here but in past projects it never was
+        let mut window = render::Window::new((1, 1), 0, (self.area.read().width, self.area.read().height));
+        window.hide();
+        self.renderer.write().add_window(window, String::from("null_window_back_wall_unique"), vec![]);
+        self.renderer.write().render(None);
+
         let terminal_size_change = send_sync!(true);
         let terminal_size_change_clone = terminal_size_change.clone();
-        
+
         let renderer_clone = self.renderer.clone();
         let (sender, receiver) = crossbeam::channel::bounded(10);
         let area_clone = self.area.clone();
@@ -242,6 +260,12 @@ impl<C> App<C> {
                 }
                 self.scene = Some(scene);
             }
+            
+            // updating the back wall
+            let mut render_write = self.renderer.write();
+            let win = render_write.get_window_reference_mut(String::from("null_window_back_wall_unique"));
+            win.resize((self.area.read().width, self.area.read().height));
+            drop(render_write);  // dropping it to prevent deadlocks
             
             self.events.write().clear_events();
             
