@@ -99,6 +99,7 @@ TermRender provides a flexible widget system:
 * DynamicWidget: An interactable widget. In the future, more advanced versions will be implemented which will default as buttons or other such higher-level widgets.
 * ButtonWidget: A simple button with automatic click handling.
 * StaticTextWidget: Displays static text with styling options.
+* TypingWidget: A customizable text input field.
 * More coming soon!
 
 * Creating Custom Widgets
