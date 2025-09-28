@@ -3,6 +3,8 @@
 use crate::widget_impls::*;
 use crate::widget::*;
 
+type RenderFunction<C> = Box<dyn Fn((u16, u16), (u16, u16), &ButtonState, &mut C) -> Option<Vec<crate::render::Span>>>;
+
 /// Represents the various interaction states of a button widget.
 /// `Pressed`, `Held`, and `Released` include mouse event types
 /// to specify which mouse button triggered the state change.
@@ -34,7 +36,7 @@ pub struct ButtonWidgetBuilder<C> {
     /// The size and position configuration for the widget.
     pub size_and_position: SizeAndPosition,
     /// The custom render function for the widget, if any.
-    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>>,
+    pub render_function: Option<RenderFunction<C>>,
 
     /// Optional update handler closure for the button widget.
     /// This closure is called during event updates and receives references to the widget,
@@ -131,7 +133,7 @@ impl<C: 'static> WidgetBuilder<C> for ButtonWidgetBuilder<C> {
     }
     
     /// The type representing the renderer closure.
-    type RendererType = Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>;
+    type RendererType = RenderFunction<C>;
     /// Sets the rendering closure that generates content for the widget.
     /// The closure receives size and position parameters and returns an optional vector of type `Span`.
     /// By default, there is no renderer, leaving the widget empty (apart from stylization like a border or title).
@@ -248,7 +250,7 @@ pub struct ButtonWidget<C> {
     // takes the size and position in, and returns the vector of spans to render
     // this is a function object, allowing for capturing of state if desired
     /// Optional closure that generates the widget's rendered content based on size and position.
-    pub render_function: Option<Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>>,
+    pub render_function: Option<RenderFunction<C>>,
 
     /// Optional closure that handles updates to the widget's state.
     pub update_handler: Option<Box<dyn Fn(&mut ButtonWidget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>, &ButtonState)>>,
@@ -275,7 +277,7 @@ impl<C> ButtonWidget<C> {
     /// simplicity, and consistency.*
     pub fn new(name: String,
                mut size_and_position: SizeAndPosition,
-               render_function: Option<Box<dyn Fn((u16, u16), (u16, u16), &ButtonState) -> Option<Vec<crate::render::Span>>>>,
+               render_function: Option<RenderFunction<C>>,
                depth: u16,
                display_area: &crate::render::Rect,
     ) -> Result<(ButtonWidget<C>, crate::render::Window), WidgetErr> {
@@ -413,13 +415,13 @@ impl<C> Widget<C> for ButtonWidget<C> {
     /// Called automatically during render passes.
     /// If `Some(render_closure)` is provided, that closure will be called.
     /// If the closure returns `Some(Vec<Span>)`, then the rendered content will be set as such.
-    fn update_render(&mut self, window: &mut crate::render::Window, area: &crate::render::Rect) -> bool {
+    fn update_render(&mut self, window: &mut crate::render::Window, area: &crate::render::Rect, app_state: &mut C) -> bool {
         // only needs to change with size
         let (size, position) = self.size_and_position.get_size_and_position(area);
         window.resize(size);
         window.r#move(position);
         if let Some(render_function) = &self.render_function {
-            if let Some(render) = render_function(size, position, &self.button_state) {
+            if let Some(render) = render_function(size, position, &self.button_state, app_state) {
                 return window.try_update_lines(render);
             }
         } false

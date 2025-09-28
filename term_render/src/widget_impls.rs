@@ -113,7 +113,7 @@ impl SizeAndPosition {
     /// * `area` - The current terminal display area
     /// # Returns
     /// Tuple containing ((width, height), (x, y)) coordinates
-    ///  - *Note: static layout configurations will always return the values regardless of the inputted area.*
+    ///  - *Note: static layout configurations will always return the same values regardless of the inputted area.*
     pub fn get_size_and_position(&mut self, area: &crate::render::Rect) -> ((u16, u16), (u16, u16)) {
         let width = (((area.width as f32) * self.size_area_percent.0) as i16 + self.size_offset.0) as u16;
         let height = (((area.height as f32) * self.size_area_percent.1) as i16 + self.size_offset.1) as u16;

@@ -84,8 +84,8 @@ impl<C> Widget<C> for WidgetEventQueuer<C> {
     /// Static widgets may leave this empty, while interactive widgets should respond to events.
     /// Returns true if the widget's content changed and needs re-rendering (mainly to indicate
     /// the need for re-rendering the parents).
-    fn update_render(&mut self, window: &mut term_render::Window, area: &term_render::Rect) -> bool {
-        unsafe {  (*self.owner).update_render(window, area)  }
+    fn update_render(&mut self, window: &mut term_render::Window, area: &term_render::Rect, app_state: &mut C) -> bool {
+        unsafe {  (*self.owner).update_render(window, area, app_state)  }
     }
     
     /// Returns indices of child widgets for scene graph traversal.
@@ -141,7 +141,7 @@ pub trait Widget<T> {
     /// Static widgets may leave this empty, while interactive widgets should respond to events.
     /// Returns true if the widget's content changed and needs re-rendering (mainly to indicate
     /// the need for re-rendering the parents).
-    fn update_render(&mut self, window: &mut term_render::Window, area: &term_render::Rect) -> bool;
+    fn update_render(&mut self, window: &mut term_render::Window, area: &term_render::Rect, app_state: &mut T) -> bool;
     
     /// Returns indices of child widgets for scene graph traversal.
     fn get_children_indexes(&self) -> Vec<usize>;
@@ -452,7 +452,7 @@ impl<C> Scene<C> {
     /// Processes events first, then updates visual representation for each widget.
     /// If a widget's content changes, its parents are also updated to reflect the change.
     /// This ensures the entire scene graph remains consistent and up-to-date.
-    pub fn update_all_widgets(&mut self, app_main: &mut crate::App<C>, data: &mut C) -> Result<(), WidgetErr> {
+    pub fn update_all_widgets(&mut self, app_main: &mut App<C>, data: &mut C) -> Result<(), WidgetErr> {
         for i in 0..self.widgets.len() {  // the if let skips reserved indices
             if self.widgets.index(i).is_none() {  continue;  }
             
@@ -465,7 +465,7 @@ impl<C> Scene<C> {
             
             widget.update_with_events(data, app_main, self);
             let window = widget.get_window_ref();
-            if widget.update_render(app_main.renderer.write().get_window_reference_mut(window), &*app_main.area.read()) && widget.get_parent_index().is_some() {
+            if widget.update_render(app_main.renderer.write().get_window_reference_mut(window), &*app_main.area.read(), data) && widget.get_parent_index().is_some() {
                 // if the widget changed, update all its children
                 self.update_children(i, &mut *app_main.renderer.write())?;
             }
@@ -503,7 +503,7 @@ impl<C> Scene<C> {
     
     /// Updates a specific widget and its rendering.
     /// Also triggers updates to parent widgets to maintain consistency if the window is updated.
-    pub fn update_widget(&mut self, index: usize, app_main: &mut crate::App<C>, area: &term_render::Rect, data: &mut C) -> Result<(), WidgetErr> {
+    pub fn update_widget(&mut self, index: usize, app_main: &mut App<C>, area: &term_render::Rect, data: &mut C) -> Result<(), WidgetErr> {
         if index >= self.widgets.len() || self.widgets.index(index).is_none() {
             return Err(WidgetErr::new("Index out of bounds"));
         }
@@ -520,7 +520,7 @@ impl<C> Scene<C> {
         };
         let renderer = &mut *app_main.renderer.write();
         let window = renderer.get_window_reference_mut(widget.get_window_ref());
-        if widget.update_render(window, area) && widget.get_parent_index().is_some() {
+        if widget.update_render(window, area, data) && widget.get_parent_index().is_some() {
             self.update_parents(index, &mut *app_main.renderer.write())?;
         }
         
@@ -529,13 +529,13 @@ impl<C> Scene<C> {
     
     /// Updates only the rendering of a specific widget without processing events.
     /// Useful for visual-only changes that don't affect widget state.
-    pub fn update_widget_renderer(&mut self, index: usize, app: &mut term_render::App, area: &term_render::Rect) -> Result<(), WidgetErr> {
+    pub fn update_widget_renderer(&mut self, index: usize, app: &mut term_render::App, area: &term_render::Rect, data: &mut C) -> Result<(), WidgetErr> {
         let widget = match self.widgets.index_mut(index) {
             Some(w) => w,
             None => return Err(WidgetErr::new("Invalid widget index - 7")),
         };
         let window = app.get_window_reference_mut(widget.get_window_ref());
-        if widget.update_render(window, area) && widget.get_parent_index().is_some() {
+        if widget.update_render(window, area, data) && widget.get_parent_index().is_some() {
             self.update_parents(index, app)?;
         }
         Ok(())

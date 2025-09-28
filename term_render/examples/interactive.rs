@@ -45,7 +45,7 @@ fn secondary_button_behavior(
         // creating another popup, this time as a static textbox showing different Widget implementations and how they can be nested
         term_render::widget_impls::StaticWidgetBuilder::<AppData>::builder(String::from("popup_final"))
             .with_border(true)
-            .with_renderer(Box::new(|_size, _position| {
+            .with_renderer(Box::new(|_size, _position, _data| {
                 Some(vec![Span::from_tokens(vec![color!("This is another popup!", Red)])])
             }))
             .with_dynamic_position((18, 7), (0.1, 0.1))
@@ -80,7 +80,7 @@ fn base_button_behavior(
         // creating another widget, but this time as a button type which shows how it can simplify the user end code
         term_render::widget_impls::ButtonWidgetBuilder::<AppData>::builder(String::from("popup"))
             .with_border(true)
-            .with_renderer(Box::new(|_size, _position, state| {
+            .with_renderer(Box::new(|_size, _position, state, _data| {
                 // rendering different text colors based on the button state (this could definitely be done better with less code, but this is just an example)
                 match state {
                     term_render::widget_impls::ButtonState::Pressed(_) => {
@@ -144,7 +144,7 @@ async fn main() -> tokio::io::Result<()> {
     // creating a random typing field to show how it can be used
     term_render::widget_impls::TypingWidgetBuilder::<AppData>::builder(String::from("Typing box"))
         .with_border(true)
-        .with_renderer(Box::new(|_size, _position, content, selected| {
+        .with_renderer(Box::new(|_size, _position, content, selected, _data| {
             Some(vec![Span::from_tokens(vec![color!(match !(content[0].is_empty() && content[1].is_empty()) {
                 true if selected => format!("{}|{}", content[0], content[1]),  // showing the current content with a cursor at the end
                 true => format!("{}{}", content[0], content[1]),
@@ -160,7 +160,7 @@ async fn main() -> tokio::io::Result<()> {
     // creating a widget that has the functionality to create more widgets based on user interactions
     term_render::widget_impls::DynamicWidgetBuilder::<AppData>::builder(String::from("button"))
         .with_border(true)
-        .with_renderer(Box::new(|_size, _position| {
+        .with_renderer(Box::new(|_size, _position, _data| {
             Some(vec![Span::from_tokens(vec![color!("I am thing!")])])
         }))
         .with_position((10, 10))

@@ -1,6 +1,8 @@
 use crate::widget_impls::*;
 use crate::widget::*;
 
+type RenderFunction = Vec<crate::render::Span>;
+
 /// Builder for creating StaticTextWidget instances with a fluent interface.
 /// Maintains configuration state until build() is called to create the actual widget.
 /// `StaticTextWidgetBuilder` is an example of an implementation of `WidgetBuilder`, where
@@ -162,9 +164,9 @@ impl<C: 'static> WidgetBuilder<C> for StaticTextWidgetBuilder<C> {
         self
     }
     
+    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut crate::App<C>, &mut Scene<C>, &mut C)>;
     /// Static widgets do not respond to events, so this is a no-op that returns self.
-    type FunctionType = Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>;
-    fn with_update_handler(self, _handler: Box<dyn Fn(&mut dyn Widget<C>, &mut C, &mut crate::App<C>, &mut Scene<C>)>) -> Self {
+    fn with_update_handler(self, _handler: Self::FunctionType) -> Self {
         // static widgets don't need an update handler
         self
     }
@@ -288,7 +290,7 @@ impl<C> Widget<C> for StaticTextWidget<C> {
     /// Called automatically during render passes.
     /// If `Some(render_closure)` is provided, that closure will be called.
     /// If the closure returns `Some(Vec<Span>)`, then the rendered content will be set as such.
-    fn update_render(&mut self, window: &mut crate::render::Window, area: &crate::render::Rect) -> bool {
+    fn update_render(&mut self, window: &mut crate::render::Window, area: &crate::render::Rect, _app_state: &mut C) -> bool {
         // only needs to change with size
         let (size, position) = self.size_and_position.get_size_and_position(area);
         window.resize(size);
